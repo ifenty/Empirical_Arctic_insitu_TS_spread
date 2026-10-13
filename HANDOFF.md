@@ -34,3 +34,6 @@ The climatology will constrain an ocean model, so it must not contain extrapolat
 - Provide formal uncertainty estimates for every valid cell (T and S, per level and period). Candidates: observation-count and nearest-obs-distance support, sampling variability of the contributing obs, and an objective-analysis error estimate (Barnes/Cressman weights, or optimal-interpolation error with a noise-to-signal ratio).
 - Choose the cutoff criteria with the user's constraints: no values where support is too distant or too sparse. Document them in `docs/` and the product metadata.
 - Applies to the improved method (step 3) and the 1992-2023 dataset (step 4). Keep the faithful port unchanged.
+
+## New requirement (2026-10-13): vertical grid
+New climatologies must use the original WOA standard vertical grid (not a custom or reduced one). The scatter data already carries all 102 WOA levels (0-5500 m); the published AOTD uses only the top 57 (0-1500 m). Assumption: use the full 102-level WOA grid wherever data support it, with NaN below the data-supported depth. Confirm with the user whether the 0-1500 m subset is acceptable for the first release.
