@@ -16,3 +16,4 @@ Run with `PYTHONPATH=. python ...` from the repo root.
 
 ## Data provenance
 - EASE-Grid 2.0 N 25 km ancillary lat/lon and land mask (`data/ease2/`, untracked): NSIDC-0772, https://daacdata.apps.nsidc.org/pub/DATASETS/nsidc0772_easegrids_anc_grid_info/
+- EASE2 N 25 km LOCI land mask (`EASE2_N25km.LOCImask_land50_coast0km.720x720.bin`): NSIDC-0609, https://daacdata.apps.nsidc.org/pub/DATASETS/nsidc0609_loci_ease2/north/
