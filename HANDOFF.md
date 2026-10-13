@@ -27,3 +27,10 @@ Plan in `STATUS.md`: 1 faithful port + reproduction, 2 QC port, 3 improved metho
 - Use `.venv/bin/python`. The conda python lacks numpy.
 - Never exceed 2 workers or 20% RAM. Another session shares this VM.
 - The bathymetry file is missing upstream. `reproduce.py` builds the level mask from the published fields as a workaround.
+
+## New requirement (2026-10-13): uncertainty + data-honest product
+The climatology will constrain an ocean model, so it must not contain extrapolated "made-up" values.
+- Provide a data-honest version: NaN wherever there is no real observation within a justified distance/support threshold. Do not fill by smoothing or background fields.
+- Provide formal uncertainty estimates for every valid cell (T and S, per level and period). Candidates: observation-count and nearest-obs-distance support, sampling variability of the contributing obs, and an objective-analysis error estimate (Barnes/Cressman weights, or optimal-interpolation error with a noise-to-signal ratio).
+- Choose the cutoff criteria with the user's constraints: no values where support is too distant or too sparse. Document them in `docs/` and the product metadata.
+- Applies to the improved method (step 3) and the 1992-2023 dataset (step 4). Keep the faithful port unchanged.
