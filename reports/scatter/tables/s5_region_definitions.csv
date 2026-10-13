@@ -1,0 +1,17 @@
+region,definition
+Canadian Arctic Archipelago,"polygon (-128,70) (-120,68.5) (-100,67) (-82,67.5) (-80,73.5) (-72,76) (-66,78) (-60,81) (-62,83) (-85,83) (-105,80) (-120,77) (-126,74) [lon E, lat N]"
+Hudson Bay / Foxe Basin,"lon -95..-76, lat 51..66"
+Central Arctic (>80N: Nansen/Amundsen/Makarov),lat >= 80 (anywhere not already in the CAA polygon)
+Baffin Bay / Davis Strait,"lon -80..-50, lat 64..80"
+Fram Strait / Greenland Sea,"lon -35..15, lat 72..80"
+Iceland Sea,"lon -40..-8, lat 64.5..72"
+Norwegian Sea,"lon -12..18, lat 62..72"
+Barents Sea,"lon 18..55, lat 66..80 plus lon 15..18, lat 72..80"
+Kara Sea,"lon 55..100, lat 66..80"
+Laptev Sea,"lon 100..140, lat 66..80"
+East Siberian Sea,"lon 140..175, lat 66..80"
+Chukchi Sea,"lon 175..180 and -180..-157, lat 66..73"
+Beaufort Sea / Canada Basin,"lon -157..-100, lat 68..80; lon 175..180 / -180..-157, lat 73..80"
+Bering Sea / Bering Strait,"lat < 66, lon >= 160 or <= -150"
+Labrador Sea / subpolar N Atlantic,"lat < 64.5, lon -75..-12; lat < 62, lon -12..12"
+Other,"everything else (Baltic/Scandinavian coast, Okhotsk side, unassigned strips)"

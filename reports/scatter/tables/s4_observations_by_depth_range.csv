@@ -1,0 +1,4 @@
+range,levels,T obs,S obs,profiles with any T,% of all profiles
+"0-1500 m (WOA monthly & seasonal, 57 levels)",57,11428386,11428385,413951,99.9348174042359
+1500-5500 m (levels deeper than 1500 m; WOA annual only),45,383501,383501,38865,9.382672534709732
+"0-5500 m (WOA annual, 102 levels)",102,11811887,11811886,414221,100.0

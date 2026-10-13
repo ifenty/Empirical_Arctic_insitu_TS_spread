@@ -1,0 +1,876 @@
+
+=====PAGE 1=====
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+WORLD OCEAN ATLAS 2023  
+ 
+ 
+Product Documentation 
+ 
+ 
+ 
+James R. Reagan, Hernan E. Garcia, Timothy P. Boyer, Olga K. Baranova, 
+Courtney Bouchard, Scott L. Cross, Dmitry Dukhovskoy, Alexandra I. Grodsky, 
+Ricardo A. Locarnini, Alexey V. Mishonov, Christopher R. Paver, Dan Seidov, 
+and Zhankun Wang 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Ocean Climate Laboratory 
+NCEI / NESDIS / NOAA  
+ 
+ 
+Silver Spring, MD 
+February 2024 
+ 
+  
+
+=====PAGE 2=====
+ 
+ 
+2 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+For updates on the data, documentation, and additional  
+information about the WOA23 please refer to: 
+https://www.ncei.noaa.gov/products/world-ocean-atlas    
+ 
+Please cite this document as:  
+ 
+Reagan, J.R., H.E. Garcia, T.P. Boyer, O.K. Baranova, C. Bouchard, S.L. Cross, D. 
+Dukhovskoy, A. Grodsky, R.A. Locarnini, A.V. Mishonov, C.R. Paver, D. Seidov, and Z. Wang 
+(2024). World Ocean Atlas 2023: Product Documentation. A. Mishonov, Technical Editor. 
+ 
+This document is available on line at https://www.ncei.noaa.gov/products/world-ocean-atlas 
+NOAA National Centers for 
+Environmental Information 
+ 
+Additional copies of this publication, as well as information 
+about NCEI data holdings and services, are available upon 
+request directly from NCEI. 
+ 
+ 
+NOAA/NESDIS 
+National Centers for Environmental Information  
+SSMC 3, 4th floor 
+1315 East-West Highway 
+Silver Spring, MD  20910-3282 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Telephone:   +1 (828) 271-4800 
+E-mail:   NCEI.Info@noaa.gov  
+WEB:    https://www.ncei.noaa.gov/  
+
+=====PAGE 3=====
+ 
+ 
+3 
+  
+
+=====PAGE 4=====
+ 
+ 
+4 
+Table of Contents 
+To Sydney (Syd) Levitus ................................................................................................................ 5 
+Acknowledgments........................................................................................................................... 6 
+World Ocean Atlas 2023 (WOA23) Product Documentation ........................................................ 7 
+• Available grid resolution...................................................................................................... 8 
+• Available time spans and time periods ................................................................................ 8 
+• Available fields .................................................................................................................... 8 
+• Available oceanographic variables. ................................................................................... 10 
+• Data formats ....................................................................................................................... 12 
+• File naming convention...................................................................................................... 12 
+• Utilities ............................................................................................................................... 13 
+A.  Installing gzip for the first time....................................................................................... 13 
+B.  Decompressing data from WOA ..................................................................................... 14 
+Appendix 1.  Basins defined for objective analysis and the shallowest standard depth level for 
+which each basin is defined. ..................................................................................................... 15 
+Appendix 2. Sample from csv file format ................................................................................. 16 
+Appendix 3. Sample from netCDF file format ......................................................................... 17 
+ 
+List of Tables 
+ 
+Table 1. Time Spans for World Ocean Atlas 2023 ......................................................................... 8 
+Table 2. Available objectively analyzed and statistical fields ........................................................ 9 
+Table 3. Depths associated with each standard level number.. ..................................................... 11 
+Table 4. Depth ranges and standard depth levels numbers for annual, seasonal, and monthly 
+statistics of each available oceanographic variable. ..................................................................... 12 
+  
+
+=====PAGE 5=====
+ 
+ 
+5 
+To Sydney (Syd) Levitus 
+ 
+ 
+Syd exemplifies the craft of 
+careful, systematic inquiry of the large-
+scale distributions and low -frequency 
+variability from seasonal -to-decadal 
+time scales of ocean properties. He was 
+one of the first to recognize the 
+importance and benefits of creating 
+objectively analyzed climatological 
+fields of measured ocean variables 
+including temperature, salinity, oxygen, 
+nutrients, and derived fields such as 
+mixed layer depth. Upon publishing 
+Climatological Atlas of the World 
+Ocean in 1982, he distributed this work 
+without restriction, an act not common at the time. This seminal atlas moved the oceanographic 
+diagnostic research from using hand- drawn maps to using objectively analyzed fields of ocean 
+variables.  
+With his NODC  (now NCEI)  Ocean Climate Laboratory (OCL) colleagues, and 
+unprecedented cooperation from the U.S. and international ocean scientific and data management 
+communities, he created the World Ocean Database  (WOD); the world’s lar gest collection of 
+ocean profile data that are available internationally without restriction. The World Ocean Atlas  
+(WOA) series represents the gridded objective analyses of the WOD and these fields have also 
+been made available without restriction.  
+The W OD and WOA series are used so frequently that they have become known 
+generically as the “Levitus Climatology”. These databases and products enable systematic studies 
+of ocean variability in its climatological context that were not previously possible. His foresight in 
+creating WOD and WOA has been demonstrated by their widespread use over the years. Syd has 
+made major contributions to the scientific and ocean data management communities. He has also 
+increased public understanding of the role of the oceans i n climate. He retired in 2013 after 39 
+years of distinguished civil service. He distilled the notion of the synergy between rigorous data 
+management and science; there are no shortcuts.  
+All of us at the Ocean Climate Laboratory would like to once again dedicate this atlas to 
+Syd, his legacy, vision, and mentorship. 
+ 
+The OCL Team 
+ 
+  
+
+
+=====PAGE 6=====
+ 
+ 
+6 
+Acknowledgments 
+ 
+This work was made possible by a grant from the NOAA Climate and Global Change Program, 
+which enabled the establishment of a research group at the National Oceanographic Data Center 
+(now the National Centers for Environmental Information – NCEI). The purpose of this group is 
+to prepare research quality oceanographic databases, as well as to compute objective analyses of, 
+and diagnostic studies based on, these databases.  Support is now from base funds and from the 
+NOAA Climate Program Office. 
+The data on which this atlas is based are in World Ocean Database 2023 (WOD) and are distributed 
+on-line by NCEI.  Many data were acquired as a result of the IOC/IODE Global Oceanographic 
+Data Archaeology and Rescue  (GODAR) project  and the IOC/IODE World Ocean Database  
+project (WOD).  Additionally, most of the subsurface ocean profiles over the past two decades in 
+WOD are a result of the Argo program which has provided unprecedented observation coverage 
+in both space and time of the near-global subsurface ocean. 
+The WOD is a composite of publicly available ocean profile data, both historical and recent.  We 
+acknowledge the scientists, technicians, and programmers who have collected and processed data, 
+those individuals who have submitted data to national and regional data centers as well as the 
+managers and staff at the various data centers.  We are continuing to work on a more substantive 
+and formalized way to acknowledge all those who have collected and contributed to oceanographic 
+measurements, which were used to calculate the fields in the WOA.  Until we have such a system 
+in place, we direct the reader’s attention to lists of primary investigators, institutions, and  projects, 
+which contributed data (codes can be used to locate data in the World Ocean Database).  We also 
+thank our colleagues at the NCEI.  Their efforts have made this and similar works possible. 
+ 
+ 
+ 
+ 
+ 
+We dedicate this work to Carla Coleman who always contributed 
+with a smile and was taken from us too soon.  
+ 
+ 
+ 
+ 
+
+
+=====PAGE 7=====
+ 
+ 
+7 
+World Ocean Atlas 2023 (WOA23) Product Documentation 
+ 
+Summary: This document describes the World Ocean Atlas 20 23 ( WOA23) statistical and 
+objectively analyzed field data files.  This description includes the types of statistical fields 
+available, the oceanographic variables analyzed, and at which standard depth levels, time spans, 
+time periods and grid resolutions they were analyzed. This description also includes the naming 
+convention for the files, as well  as the structure and format for the files.  For a description of the 
+data used, and the procedures for calculating WOA statistical fields, see 
+https://www.ncei.noaa.gov/products/world-ocean-atlas 
+The World Ocean Atlas 20 23 (WOA23) release – February 2024 – updates previous versions of 
+the World Ocean Atlas to include approximately ~3.1 million new oceanographic casts added to 
+the World Ocean Database (WOD) since the previous release (WOD18 & WOA18 – July 2019) 
+as well as renewed and updated quality control.  We would ask that if users of the atlas find any 
+suspect features in WOA23, they please contact us (OCL.help@noaa.gov) with an explanation of 
+the problem so we can investigate. 
+The following publications are  released concurrently with the final version of WOA 23. These 
+publications are available at the WOA 23 web: https://www.ncei.noaa.gov/access/world-ocean-
+atlas-2023/  
+Locarnini, R.A., A.V. Mishonov, O.K. Baranova, J.R. Reagan, T.P. Boyer, D. Seidov, Z. Wang, 
+H.E. Garcia, C. Bouchard, S.L. Cross, C.R. Paver, and D. Dukhovskoy (2024). World Ocean 
+Atlas 2023, Volume 1: Temperature. A. Mishonov Tech. Ed., NOAA Atlas NESDIS 89, 52 pp, 
+https://doi.org/10.25923/54bh-1613  
+Reagan, J.R., D. Seidov, Z. Wang, D. Dukhovskoy, T.P. Boyer, R.A. Locarnini, O.K. Baranova, 
+A.V. Mishonov, H.E. Garcia, C. Bouchard, S.L. Cross, and C.R. Paver. (2024). World Ocean 
+Atlas 2023, Volume 2: Salinity . A. Mishonov, Tech. Ed., NOAA Atlas NESDIS 90, 51pp. 
+https://doi.org/10.25923/70qt-9574  
+Garcia, H.E., Z. Wang, C. Bouchard, S.L. Cross, C.R. Paver, J.R. Reagan, T.P. Boyer, R.A. 
+Locarnini, A.V. Mishonov, O. Baranova, D. Seidov, and D. Dukhovskoy (2024). World Ocean 
+Atlas 2023, Vol ume 3: Dissolved Oxygen, Apparent Oxygen Utilization, and Oxygen 
+Saturation. A. Mishonov, Tech. Ed., NOAA Atlas NESDIS 91, 34pp, 
+https://doi.org/10.25923/rb67-ns53  
+Garcia, H.E., C. Bouchard, S.L. Cross, C.R. Paver, Z. Wang, J.R. Reagan, T.P. Boyer, R.A. 
+Locarnini, A.V. Mishonov, O. Baranova, D. Seidov, and D. Dukhovskoy (2024). World Ocean 
+Atlas 2023, Vol ume 4: Dissolved Inorganic Nutrients (phosphate, nitrate, silicate) . A. 
+Mishonov, Tech. Ed., NOAA Atlas NESDIS 92, 34pp, https://doi.org/10.25923/39qw-7j08  
+Mishonov, A.V., T.P. Boyer, O.K. Baranova, C.N. Bouchard, S.L. Cross, H.E. Garcia, R.A. 
+Locarnini, C.R. Paver, J.R. Reagan, Z. Wang, D. Seidov, A.I. Grodsky, J. Beauchamp (2024). 
+World Ocean Database 2023. C. Bouchard, Technical Ed. NOAA Atlas NESDIS 97 , DOI 
+https://doi.org/10.25923/z885-h264 (in preparation). 
+
+=====PAGE 8=====
+ 
+ 
+8 
+• Available grid resolution 
+The World Ocean Atlas 2023 consists of objectively analyzed climatological mean fields on both 
+quarter- and one-degree latitude/longitude grids.  Statistical fields used in quality control (but not 
+objectively analyzed climatological means) are available on a five-degree latitude/longitude grid. 
+ 
+• Available time spans and time periods 
+Time span refers to the years represented in the climatological mean and statistical fields.  Time 
+period refers to the divisions of a calendar year.  The time periods are annual, seasonal (by three -
+month periods; Winter = January, February, and March; Spring, Summer, and F all are the 
+sequentially following three -month periods), and monthly.  Time spans are mostly decadal (10 
+year) spans, but also include ‘all’, denoting all data used regardless of year, and ‘decav’, an average 
+of all available (year specific) time spans.  A n objective analysis for a specific time period is 
+considered to be representative of that time period for the given time span.  Table 1 lists all time 
+spans that are part of WOA23. 
+Table 1. Time Spans for World Ocean Atlas 2023 
+Time Span Abbreviation Comment 
+1955 – 1964 5564 First decade with sufficient data for climatological mean fields 
+1965 – 1974 6574  
+1975 – 1984 7584  
+1985 – 1994 8594  
+1995 – 2004 95A4  
+2005 – 2014 A5B4 Global coverage of Argo floats from 2005 
+2015 – 2022 B5C2 8 year “decade” 
+1971 – 2000 decav71A0 30-year climate normal for 1971-2000 
+1981 – 2010 decav81B0 30-year climate normal for 1981-2010 
+1991 – 2020 decav91C0 30-year climate normal for 1991-2020 
+1955-2022 decav Average of seven decadal means from 1955 to 2022. 
+All available 
+years all Average of all available data. Refers to the 1965-2022 time span for dissolved oxygen (and related fields) and nutrients.  
+• Available fields 
+Table 2  presents the list of statistical fields and the grid resolutions at  which the fields are 
+available. Quarter -degree fields represent the world as 1440x720 quarter -degree longitude  / 
+latitude boxes. One-degree fields represent the world as 360x180 one -degree longitude / latitude 
+boxes. Five-degree fields divide the world into 72x36 five-degree longitude / latitude boxes. Five-
+degree statistical fields are the fields used for standard deviation window checks to filter the data; 
+data that pass these statistical checks are then used to calculate the quarter-degree and one-degree 
+climatology fields. 
+ 
+
+=====PAGE 9=====
+ 
+ 
+9 
+Table 2. Available objectively analyzed and statistical fields 
+Field Name 
+Quarter-
+degree field 
+calculated 
+One-degree 
+field 
+calculated 
+Five-degree 
+field 
+calculated 
+Field Type 
+Code (for 
+file names) 
+Objectively analyzed climatology √ √  an 
+Statistical mean √ √ √ mn 
+Number of observations √ √ √ dd 
+Seasonal or monthly climatology 
+minus annual climatology √ √  ma 
+Standard deviation from statistical 
+mean √ √ √ sd 
+Standard error of the statistical 
+mean √ √ √ se 
+Statistical mean minus objectively 
+analyzed climatology √ √  oa 
+Number of mean values within 
+radius of influence √ √  gp 
+Objectively analyzed standard 
+deviation √ √  sdo 
+Standard error of the analysis √ √  sea 
+ 
+Short description of the statistical fields in WOA23 
+• Objectively analyzed climatologies  are the resulting  mean fields for an oceanographic 
+variable at standard depth levels for the World Ocean. 
+• The statistical mean is the average of all depth interpolated data values that pass quality 
+control checks at each standard depth level for each variable in each quarter -degree, one-
+degree, or five-degree square which contain at least one measurement for the given 
+oceanographic variable. 
+• The number of observations of each variable in each quarter-degree, one-degree, or five-
+degree square of the World Ocean at each standard depth level  that pass quality control 
+checks. 
+• The standard deviation about the statistical mean of each variable in each quarter-degree, 
+one-degree, or five-degree square at each standard depth level  that pass quality control 
+checks. 
+• The standard error of the mean  of each variable in each quarter -degree, one-degree, or 
+five-degree square at each standard depth level that pass quality control checks. 
+• The seasonal or monthly climatology minus the annual climatology  at each quarter -
+degree or one-degree square at each standard depth. 
+• The statistical mean minus the climatological mean at each quarter-degree or one-degree 
+
+=====PAGE 10=====
+ 
+ 
+10 
+square at each standard depth.  This value is used as an estimate of interpolation and 
+smoothing error. 
+• The number of one-degree squares within the smallest radius of influence around each 
+quarter-degree or one-degree square that contain a statistical mean value. 
+• The objectively analyzed standard deviation  are the resulting fields from objectively 
+analyzing the standard deviation about the statistical mean fields.  Only grid boxes that 
+contain 6 or more observations are used in the objective analysis. New for WOA23. 
+• The standard error of analysis is one estimate of the uncertainty in the objective analysis.  
+It is computed by calculating the standard error of the differences between the objectively 
+analyzed and statistical mean fields within the 2 nd radius of influence (669km for one-
+degree, 267km for quarter-degree).  A full description of this field a nd its calculation can 
+be found in the supplement of Levitus et al. (2012). New for WOA23. 
+In addition to the statistical fields found in 
+https://www.ncei.noaa.gov/data/oceans/woa/WOA23/DATA/ , there are two types of mask files 
+(ending in suffix .msk).  These files contain information used to calculate the statistical fields. 
+• The landsea_XX.msk contains the standard depth level number at which the bottom of the 
+ocean is first encountered at each quarter-degree or one-degree square for the entire world.  
+Land will have a value of 1, corresponding to the surface.  Values of standard depth levels 
+are listed in Table 3.  
+• The basin_XX.msk contains the basin code number defined for each grid square at each 
+standard depth from the surface to 5500m.  Each basin is identified by a code number that 
+ranges from 1 to 60.  The basin code number in a given quarter -degree and one -degree 
+square may change with increased depth level. Appendix 1  lists the ge ographic basin 
+names, the code number associated with each basin, and the standard depth level at which 
+the given basin is first encountered. 
+XX in the above mask names is either 01 (one -degree) or 04 (quarter -degree), depending on the 
+resolution used to g enerate the land -sea and basin masks. These mask files are found at  
+https://www.ncei.noaa.gov/data/oceans/woa/WOA23/MASKS/  . 
+• Available oceanographic variables.   
+The statistical fields were calculated for six  oceanographic variables: temperature, salinity, 
+dissolved oxygen, nitrate, phosphate, and silicate.  Due to the irregularity  in data in spatial and 
+temporal distribution at various depths for different variables, not all variables were analyzed at 
+all depths for all averaging periods (annual, individual seasons and months).  Table 4  lists the 
+depth limits for each variable for each averaging period.   
+Temperature and Salini ty fields are available on one- degree and quarter-degree grids as 
+follow:   
+• One-degree annual, seasonal, and monthly fields are available for 5564, 6574, 7584, 
+8594, 95A4, A5B 4, B5C2, ‘decav71A0’, ‘decav81B0’, ‘decav91C0’ , and ‘decav’  time 
+spans;   
+• Quarter-degree annual and seasonal fields are available f or 5564, 6574, 7584, 8594, 
+95A4, A5B4, B5C2, ‘decav71A0’, ‘decav81B0’, ‘decav91C0’, and ‘decav’ time spans;    
+
+=====PAGE 11=====
+ 
+ 
+11 
+• Quarter-degree monthly fields are ONLY available for A5B 4, B5C2, ‘decav71A0’,  
+‘decav81B0’, ‘decav91C0’, and ‘decav’ time spans; 
+One-degree and quarter-degree Temperature and Salinity fields are NOT available for the 
+‘all’ time span.   
+Dissolved Oxygen (and related O2 fields) are available on a one-degree grid and for the 
+‘decav71A0’ and ‘all’ time span. 
+Nitrate, Phosphate, and S ilicate fields are available ONLY for one- degree grid and for the 
+‘all’ time span. 
+The ‘all’ time span for oxygen and inorganic nutrients is the time span from 1965-2022.  
+Five-degree grid statistics are available only for the ‘all’ time span.   
+Table 3. Depths associated with each standard level number.  
+The maximum depth of the WOA23 is 5500 m (Table 4). 
+Depth (m) Level Depth (m) Level Depth (m) Level Depth (m) Level 
+0 1 475 36 2300 70 5700 104 
+5 2 500 37 2400 71 5800 105 
+10 3 550 38 2500 72 5900 106 
+15 4 600 39 2600 73 6000 107 
+20 5 650 40 2700 74 6100 108 
+25 6 700 41 2800 75 6200 109 
+30 7 750 42 2900 76 6300 110 
+35 8 800 43 3000 77 6400 111 
+40 9 850 44 3100 78 6500 112 
+45 10 900 45 3200 79 6600 113 
+50 11 950 46 3300 80 6700 114 
+55 12 1000 47 3400 81 6800 115 
+60 13 1050 48 3500 82 6900 116 
+65 14 1100 49 3600 83 7000 117 
+70 15 1150 50 3700 84 7100 118 
+75 16 1200 51 3800 85 7200 119 
+80 17 1250 52 3900 86 7300 120 
+85 18 1300 53 4000 87 7400 121 
+90 19 1350 54 4100 88 7500 122 
+95 20 1400 55 4200 89 7600 123 
+100 21 1450 56 4300 90 7700 124 
+125 22 1500 57 4400 91 7800 125 
+150 23 1550 58 4500 92 7900 126 
+175 24 1600 59 4600 93 8000 127 
+200 25 1650 60 4700 94 8100 128 
+225 26 1700 61 4800 95 8200 129 
+250 27 1750 62 4900 96 8300 130 
+275 28 1800 63 5000 97 8400 131 
+300 29 1850 64 5100 98 8500 132 
+325 30 1900 65 5200 99 8600 133 
+350 31 1950 66 5300 100 8700 134 
+375 32 2000 67 5400 101 8800 135 
+400 33 2100 68 5500 102 8900 136 
+425 34 2200 69 5600 103 9000 137 
+450 35       
+ 
+
+=====PAGE 12=====
+ 
+ 
+12 
+Table 4. Depth ranges and standard depth levels numbers for annual, seasonal, and 
+monthly statistics of each available oceanographic variable.  
+One-letter codes are first letter of file names for given variable. 
+Oceanographic Variable  
+(one-letter code) 
+Depths for Annual 
+Climatology 
+Depths for 
+Seasonal 
+Climatology 
+Depths for 
+Monthly 
+Climatology 
+Temperature (t) 0-5500 meters  (102 levels) 0-5500 meters  (102 levels) 0-1500 meters  (57 levels) 
+Salinity (s) 0-5500 meters  (102 levels) 0-5500 meters  (102 levels) 0-1500 meters  (57 levels) 
+Oxygen (o) 0-5500 meters  (102 levels 0-1500 meters  (57 levels) 0-1500 meters  (57 levels) 
+Nitrate (n) 0-5500 meters  (102 levels) 0-800 meters  (43 levels) 0-800 meters  (43 levels) 
+Phosphate (p) 0-5500 meters  (102 levels) 0-800 meters  (43 levels) 0-800 meters  (43 levels) 
+Silicate (i) 0-5500 meters (102 levels) 0-800 meters  (43 levels) 0-800 meters  (43 levels) 
+ 
+ 
+• Data formats 
+WOA23 data files are available in four formats:   
+• Climate and Forecast (CF) compliant Network Common Data Format (NetCDF),  
+• Comma-separated value (csv) format,  
+• ArcGIS-compatible shapefiles,  
+• Compact grid format (a legacy WOA ASCII format) 
+Appendix 2 gives an example of the csv format and Appendix 3 gives an example of the structure 
+of the NetCDF file.  The legacy ASCII format files are provided for applications that have been 
+set up to read this format in previous WOA releases.  Usage of this format is not encouraged, as it 
+does not explicitly give depth, possibly resulting in confusion when reading WOA 23 files in 
+software set up for previous releases of World Ocean Atlas, or vice-versa.   
+For information regarding to the legacy WOA  ASCII format, please see 
+https://www.nodc.noaa.gov/OC5/WOD/wod-woa-faqs.html . Each csv file contains all depths for 
+a single statistical field; please note that this differs from the csv files released for WOA23. 
+ 
+• File naming convention 
+All files, except those in NetCDF format, follow the same naming convention: 
+woa23_[DECA]_[v][tp][ft][gr].[form_end] 
+
+=====PAGE 13=====
+ 
+ 
+13 
+while NetCDF files, which contain all statistical fields for a given time span, variable, time period, 
+and grid resolution in a single file, are named, 
+woa23_[DECA]_[v][tp]_[gr].[form_end] 
+Where: 
+[DECA] represents decade, the time span (years) represented by the objectively analyzed 
+means and other statistical fields as listed in Table 1: 
+[v] represents the oceanographic variable using one-letter code as listed in Table 4; 
+[tp] represents the averaging period, two-digit code as follows: 
+00 – annual statistics, all data used; 
+01 to 12 – monthly statistics (starting with 01 – January, to 12 – December); 
+13 to 16 – seasonal statistics: 
+Season 13 – North Hemisphere winter (January - March); 
+Season 14 – North Hemisphere spring (April - June); 
+Season 15 – North Hemisphere summer (July - September); 
+Season 16 – North Hemisphere autumn (October - December); 
+[ft] represents field type, describing the calculated statistic represented in the file, as listed 
+in Table 2 
+[gr] represents the grid size, two-digit code as follows: 
+04 – quarter-degree grid resolution 
+01 – one-degree grid resolution 
+5d – five-degree grid resolution 
+[form_end] format suffix (filename extension), dependent on format as follows: 
+csv – comma-separated value format 
+nc – netCDF format 
+dbf, shp, shx – shapefiles (when downloaded will be in a .tar file together) 
+dat – compact grid data format (legacy WOA ASCII format) 
+Examples: 
+woa23_95A4_s02an01.csv is a file containing World Ocean Atlas 20 23, February objectively 
+analyzed salinity on one-degree grid resolution for the years 1995-2004 in comma-separated value 
+format; 
+woa23_A5B4_t13_04.nc is a file containing World Ocean Atlas 2023, Winter objectively analyzed 
+and statistical fields of temperature on a quarter-degree grid resolution for the years 2005-2014 in 
+NetCDF format. 
+• Utilities 
+Folder utils contains decompression freeware: gzip124.exe – self-extracting DOS executable, and 
+gzip124.tar – a compressed file containing source code for UNIX users.  
+ 
+A.  Installing gzip for the first time 
+DOS Users: The file gzip124.exe is a self-extracting DOS executable.  
+
+=====PAGE 14=====
+ 
+ 
+14 
+Copy gzip124.exe to your hard drive,  
+Run gzip124.exe and use the file gzip.exe to uncompress data as described in Section B. 
+UNIX Users:  
+Copy gzip124.tar to your UNIX system  
+Run the following command: tar -xvf gzip124.tar 
+This command will create a directory named gzip-1.2.4 that includes the gzip source code and 
+documentation about copyrights, compression methods and how to compile and install the gzip 
+code. Read through the README file and when ready to build the gzip executable, follow 
+instructions in the INSTALL file. 
+ 
+B.  Decompressing data from WOA 
+To decompress the WOA files, it is  recommended to first copy the data files to a hard disk.  Use 
+gzip to decompress selected files or a directory and all subdirectories with one command.  The 
+gzip utility has a limited help menu accessible with the -h option (e.g. gzip -h); additional 
+information may be found at www.gzip.org. 
+To decompress a single file:  
+gzip -nd <filename> 
+To decompress the contents of a directory and all of its subdirectories: 
+gzip -ndr <directoryname> 
+ 
+If an older version of gzip is used, the -n option is required in order to preserve the correct file 
+names. 
+  
+
+=====PAGE 15=====
+ 
+ 
+15 
+Appendix 1.  Basins defined for objective analysis and the shallowest standard depth 
+level for which each basin is defined. 
+# Basin1 Standard Depth Level # Basin1 Standard Depth Level 
+1 Atlantic Ocean 1* 31 West European Basin 82 
+2 Pacific Ocean 1* 32 Southeast Indian Basin 82 
+3 Indian Ocean 1* 33 Coral Sea 82 
+4 Mediterranean Sea 1* 34 East Indian Basin 82 
+5 Baltic Sea  1 35 Central Indian Basin 82 
+6 Black Sea 1 36 Southwest Atlantic Basin 82 
+7 Red Sea 1 37 Southeast Atlantic Basin 82 
+8 Persian Gulf 1 38 Southeast Pacific Basin 82 
+9 Hudson Bay 1 39 Guatemala Basin 82 
+10 Southern Ocean 1* 40 East Caroline Basin 87 
+11 Arctic Ocean 1 41 Marianas Basin 87 
+12 Sea of Japan 1 42 Philippine Sea 87 
+13 Kara Sea 22 43 Arabian Sea 87 
+14 Sulu Sea  25 44 Chile Basin 87 
+15 Baffin Bay  37 45 Somali Basin 87 
+16 East Mediterranean  41 46 Mascarene Basin 87 
+17 West Mediterranean 47 47 Crozet Basin 87 
+18 Sea of Okhotsk 47 48 Guinea Basin 87 
+19 Banda Sea 55 49 Brazil Basin 92 
+20 Caribbean Sea 55 50 Argentine Basin 92 
+21 Andaman Basin 62 51 Tasman Sea 87 
+22 North Caribbean 67 52 Atlantic Indian Basin 92 
+23 Gulf of Mexico 67 53 Caspian Sea 1 
+24 Beaufort Sea 77 54 Sulu Sea II 37 
+25 South China Sea 77 55 Venezuela Basin 37 
+26 Barents Sea 77 56 Bay of Bengal 1* 
+27 Celebes Sea 62 57 Java Sea 16 
+28 Aleutian Basin 77 58 East Indian Atlantic Basin 97 
+29 Fiji Basin 82 59 Chiloe 1 
+30 North American Basin 82 60 Bransfield Strait 37 
+1Basins marked with a “*” can interact with adjacent basins in the objective analysis.  
+ 
+
+=====PAGE 16=====
+ 
+ 
+16 
+Appendix 2. Sample from csv file format 
+ 
+File=woa23_95A4_t00an01.csv (showing only the first 8 lines of the file) 
+ 
+#WOA23 one-degree ANNUAL temperature Climatological mean 
+#COMMA SEPARATED LATITUDE, LONGITUDE, AND VALUES AT DEPTHS 
+(M):0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,125,150  
+,175,200,225,250,275,300,325,350,375,400,425,450,475,500,550,600,650,700,750,800,850,900,950,100
+0,1050,1100,1150,1200,1250,1300,1350 
+,1400,1450,1500,1550,1600,1650,1700,1750,1800,1850,1900,1950,2000,2100,2200,2300,2400,2500,26
+00,2700,2800,2900,3000,3100,3200,3300,3 
+400,3500,3600,3700,3800,3900,4000,4100,4200,4300,4400,4500,4600,4700,4800,4900,5000,5100,5200
+,5300,5400,5500 
+-77.500,-178.500,-1.372,-1.393,-1.420,-1.437,-1.456,-1.486,-1.540,-1.590,-1.624,-1.659,-1.688,-1.711,-
+1.729,-1.744,-1.757,-1.771,-1. 
+783,-1.790,-1.793,-1.793,-1.793,-1.776,-1.760,-1.738,-1.716,-1.680,-1.715,-1.753,-1.810,-1.847,-1.899,-
+1.935,-1.968,-2.022,-2.036,-2 
+.038,-2.063,-1.955,-1.892 
+-77.500,-177.500,-1.405,-1.415,-1.434,-1.451,-1.459,-1.479,-1.538,-1.593,-1.629,-1.665,-1.693,-1.717,-
+1.738,-1.755,-1.766,-1.778,-1. 
+787,-1.789,-1.795,-1.802,-1.801,-1.791,-1.781,-1.762,-1.752,-1.732,-1.765,-1.799,-1.839,-1.865,-1.905,-
+1.941,-1.970,-2.021,-2.034,-2 
+.038,-2.065,-1.960,-1.905 
+-77.500,-176.500,-1.387,-1.417,-1.447,-1.462,-1.466,-1.484,-1.536,-1.592,-1.632,-1.668,-1.697,-1.722,-
+1.745,-1.764,-1.775,-1.790,-1. 
+798,-1.804,-1.809,-1.812,-1.811,-1.807,-1.802,-1.787,-1.783,-1.765,-1.790,-1.822,-1.851,-1.871,-1.908,-
+1.943,-1.968,-2.019,-2.031,-2 
+.038,-2.065,-1.959,-1.916,-0.910 
+-77.500,-175.500,-1.397,-1.415,-1.444,-1.471,-1.490,-1.512,-1.557,-1.607,-1.645,-1.683,-1.712,-1.738,-
+1.759,-1.774,-1.787,-1.802,-1. 
+810,-1.819,-1.827,-1.827,-1.822,-1.824,-1.825,-1.812,-1.812,-1.798,-1.815,-1.841,-1.860,-1.874,-1.907,-
+1.939,-1.964,-2.015,-2.026,-2 
+.037,-2.065,-1.958,-1.927 
+-77.500,-174.500,-1.385,-1.415,-1.453,-1.484,-1.509,-1.535,-1.580,-1.634,-1.671,-1.704,-1.730,-1.755,-
+1.773,-1.791,-1.806,-1.818,-1. 
+823,-1.827,-1.832,-1.835,-1.834,-1.841,-1.844,-1.832,-1.837,-1.824,-1.835,-1.857,-1.868,-1.874,-1.901,-
+1.928,-1.959,-2.008,-2.019,-2 
+.033,-2.063,-1.954,-1.941 
+-77.500,-173.500,-1.332,-1.397,-1.453,-1.498,-1.530,-1.565,-1.607,-1.657,-1.692,-1.719,-1.744,-1.766,-
+1.782,-1.802,-1.815,-1.827,-1. 
+835,-1.836,-1.840,-1.844,-1.844,-1.858,-1.862,-1.852,-1.860,-1.847,-1.853,-1.870,-1.875,-1.872,-1.892,-
+1.912,-1.951,-1.997,-2.012,-2 
+.028,-2.058,-1.947
+
+=====PAGE 17=====
+ 
+ 
+17 
+Appendix 3. Sample from netCDF file format 
+ 
+netcdf woa23_B5C2_s01_01 { 
+dimensions: 
+        nbounds = 2 ; 
+        lat = 180 ; 
+        lon = 360 ; 
+        depth = 57 ; 
+        time = 1 ; 
+variables: 
+        int crs ; 
+                crs:grid_mapping_name = "latitude_longitude" ; 
+                crs:epsg_code = "EPSG:4326" ; 
+                crs:longitude_of_prime_meridian = 0.f ; 
+                crs:semi_major_axis = 6378137.f ; 
+                crs:inverse_flattening = 298.2572f ; 
+        float lat(lat) ; 
+                lat:standard_name = "latitude" ; 
+                lat:long_name = "latitude" ; 
+                lat:units = "degrees_north" ; 
+                lat:axis = "Y" ; 
+                lat:bounds = "lat_bnds" ; 
+        float lat_bnds(lat, nbounds) ; 
+                lat_bnds:comment = "latitude bounds" ; 
+        float lon(lon) ; 
+                lon:standard_name = "longitude" ; 
+                lon:long_name = "longitude" ; 
+                lon:units = "degrees_east" ; 
+                lon:axis = "X" ; 
+                lon:bounds = "lon_bnds" ; 
+        float lon_bnds(lon, nbounds) ; 
+                lon_bnds:comment = "longitude bounds" ; 
+        float depth(depth) ; 
+                depth:standard_name = "depth" ; 
+                depth:bounds = "depth_bnds" ; 
+                depth:positive = "down" ; 
+                depth:units = "meters" ; 
+                depth:axis = "Z" ; 
+        float depth_bnds(depth, nbounds) ; 
+                depth_bnds:comment = "depth bounds" ; 
+        float time(time) ; 
+                time:standard_name = "time" ; 
+                time:long_name = "time" ; 
+                time:units = "months since 2015-01-01 00:00:00" ; 
+                time:axis = "T" ; 
+                time:climatology = "climatology_bounds" ; 
+        float climatology_bounds(time, nbounds) ; 
+                climatology_bounds:comment = "This variable defines the bounds of the climatological time 
+period for each time" ; 
+        float s_an(time, depth, lat, lon) ; 
+                s_an:standard_name = "sea_water_practical_salinity" ; 
+                s_an:long_name = "Objectively analyzed mean fields for sea_water_practical_salinity at 
+standard depth levels." ; 
+                s_an:coordinates = "time lat lon depth" ; 
+
+=====PAGE 18=====
+ 
+ 
+18 
+                s_an:cell_methods = "area: mean depth: mean time: mean within years time: mean over years" 
+; 
+                s_an:grid_mapping = "crs" ; 
+                s_an:units = "1" ; 
+                s_an:_FillValue = 9.96921e+36f ; 
+        float s_mn(time, depth, lat, lon) ; 
+                s_mn:standard_name = "sea_water_practical_salinity" ; 
+                s_mn:long_name = "Average of all unflagged interpolated values at each standard depth level 
+for sea_water_practical_salinity in each grid-square which contain at least one measurement." ; 
+                s_mn:coordinates = "time lat lon depth" ; 
+                s_mn:cell_methods = "area: mean depth: mean time: mean within years time: mean over years" 
+; 
+                s_mn:grid_mapping = "crs" ; 
+                s_mn:units = "1" ; 
+                s_mn:_FillValue = 9.96921e+36f ; 
+        int s_dd(time, depth, lat, lon) ; 
+                s_dd:standard_name = "sea_water_practical_salinity number_of_observations" ;  
+                s_dd:long_name = "The number of observations of sea_water_practical_salinity in each grid-
+square at each standard depth level." ; 
+                s_dd:coordinates = "time lat lon depth" ; 
+                s_dd:cell_methods = "area: sum depth: point time: sum" ; 
+                s_dd:grid_mapping = "crs" ; 
+                s_dd:units = "1" ; 
+                s_dd:_FillValue = -32767 ; 
+        float s_sd(time, depth, lat, lon) ; 
+                s_sd:long_name = "The standard deviation about the statistical mean of 
+sea_water_practical_salinity in each grid-square at each standard depth level." ; 
+                s_sd:coordinates = "time lat lon depth" ; 
+                s_sd:cell_methods = "area: mean depth: mean time: standard_deviation" ;  
+                s_sd:grid_mapping = "crs" ; 
+                s_sd:units = "1" ; 
+                s_sd:_FillValue = 9.96921e+36f ; 
+        float s_se(time, depth, lat, lon) ; 
+                s_se:standard_name = "sea_water_practical_salinity standard_error" ;  
+                s_se:long_name = "The standard error about the statistical mean of 
+sea_water_practical_salinity in each grid-square at each standard depth level." ; 
+                s_se:coordinates = "time lat lon depth" ; 
+                s_se:cell_methods = "area: mean depth: mean time: mean" ; 
+                s_se:grid_mapping = "crs" ; 
+                s_se:units = "1" ; 
+                s_se:_FillValue = 9.96921e+36f ; 
+        float s_oa(time, depth, lat, lon) ; 
+                s_oa:standard_name = "sea_water_practical_salinity" ; 
+                s_oa:long_name = "statistical mean value minus the objectively analyzed mean value for 
+sea_water_practical_salinity." ; 
+                s_oa:coordinates = "time lat lon depth" ; 
+                s_oa:cell_methods = "area: mean depth: mean time: mean with years time: mean over years" ;  
+                s_oa:grid_mapping = "crs" ; 
+                s_oa:units = "1" ; 
+                s_oa:_FillValue = 9.96921e+36f ; 
+        float s_ma(time, depth, lat, lon) ; 
+                s_ma:standard_name = "sea_water_practical_salinity" ; 
+                s_ma:long_name = " The objectively analyzed value for the given time period m inus the 
+objectively analyzed annual mean value for sea_water_practical_salinity." ; 
+
+=====PAGE 19=====
+ 
+ 
+19 
+                s_ma:coordinates = "time lat lon depth" ; 
+                s_ma:cell_methods = "area: mean depth: mean time: mean within years time: mean over years" 
+; 
+                s_ma:grid_mapping = "crs" ; 
+                s_ma:units = "1" ; 
+                s_ma:_FillValue = 9.96921e+36f ; 
+        int s_gp(time, depth, lat, lon) ; 
+                s_gp:long_name = "The number of grid-squares within the smallest radius of influence around 
+each grid-square which contain a statistical mean for sea_water_practical_salinity." ;  
+                s_gp:coordinates = "time lat lon depth" ; 
+                s_gp:cell_methods = "area: mean depth: mean time: mean within years time: mean over years" 
+; 
+                s_gp:grid_mapping = "crs" ; 
+                s_gp:units = "1" ; 
+                s_gp:_FillValue = -32767 ; 
+        float s_sdo(time, depth, lat, lon) ; 
+                s_sdo:standard_name = "sea_water_practical_salinity" ; 
+                s_sdo:long_name = "Objectively analyzed standard deviation fields for 
+sea_water_practical_salinity at standard depth levels." ; 
+                s_sdo:coordinates = "time lat lon depth" ; 
+                s_sdo:cell_methods = "area: mean depth: mean time: mean" ; 
+                s_sdo:grid_mapping = "crs" ; 
+                s_sdo:units = "1" ; 
+                s_sdo:_FillValue = 9.96921e+36f ; 
+        float s_sea(time, depth, lat, lon) ; 
+                s_sea:standard_name = "sea_water_practical_salinity" ; 
+                s_sea:long_name = "The standard error about the objectively analyzed data of 
+sea_water_practical_salinity defined in Levitus et al. (2012) GRL." ; 
+                s_sea:coordinates = "time lat lon depth" ; 
+                s_sea:cell_methods = "area: mean depth: mean time: mean" ; 
+                s_sea:grid_mapping = "crs" ; 
+                s_sea:units = "1" ; 
+                s_sea:_FillValue = 9.96921e+36f ; 
+ 
+// global attributes: 
+                :Conventions = "CF-1.6" ; 
+                :title = "World Ocean Atlas 2023 : sea_water_practical_salinity January 2015- 2022 1.00 
+degree" ; 
+                :summary = "Climatological mean salinity for the global ocean from in situ profile data" ;  
+                :references = "Reagan, J.R., D. Seidov, Z. Wang, D. Dukhovskoy, T.P. Boyer, R.A. Locarnini, 
+O.K. Baranova, A.V. Mishonov, H.E. Garcia, C. Bouchard, S.L. Cross, and C.R. Paver (2023). World 
+Ocean Atlas 2023, Volume 2: Salinity. A. Mishonov Technical Editor, NOAA Atlas NESDIS 90, 
+https://doi.org/10.25923/70qt-9574." ; 
+                :institution = "NOAA National Centers for Environmental Information (NCEI)" ;  
+                :comment = "Global Climatology as part of the World Ocean Atlas Project" ;  
+                :id = "woa23_B5C2_s01_01.nc" ; 
+                :naming_authority = "gov.noaa.ncei" ; 
+                :time_coverage_start = "2015-01-01" ; 
+                :time_coverage_duration = "P08Y" ; 
+                :time_coverage_resolution = "P01M" ; 
+                :geospatial_lat_min = -90.f ; 
+                :geospatial_lat_max = 90.f ; 
+                :geospatial_lon_min = -180.f ; 
+                :geospatial_lon_max = 180.f ; 
+
+=====PAGE 20=====
+ 
+ 
+20 
+                :geospatial_vertical_min = 0.f ; 
+                :geospatial_vertical_max = 1500.f ; 
+                :geospatial_lat_units = "degrees_north" ; 
+                :geospatial_lat_resolution = "1.00 degrees" ; 
+                :geospatial_lon_units = "degrees_east" ; 
+                :geospatial_lon_resolution = "1.00 degrees" ; 
+                :geospatial_vertical_units = "m" ; 
+                :geospatial_vertical_resolution = "" ; 
+                :geospatial_vertical_positive = "down" ; 
+                :creator_name = "Ocean Climate Laboratory Team" ; 
+                :creator_email = "NCEI.Info@noaa.gov" ; 
+                :creator_url = "http://www.ncei.noaa.gov" ; 
+                :project = "World Ocean Atlas" ; 
+                :processing_level = "processed" ; 
+                :keywords = "<ISO_TOPIC_Category> Oceans</ISO_TOPIC_Category> Oceans > Ocean 
+Salinity" ; 
+                :keywords_vocabulary = "ISO 19115, GCMD" ; 
+                :standard_name_vocabulary = "CF-1.6" ; 
+                :contributor_name = "Ocean Climate Laboratory" ; 
+                :contributor_role = "Calculation of climatologies" ; 
+                :featureType = "Grid" ; 
+                :cdm_data_type = "Grid" ; 
+                :publisher_name = "National Centers for Environmental Information (NCEI)" ; 
+                :publisher_url = "http://www.ncei.noaa.gov/" ; 
+                :publisher_email = "NCEI.Info@noaa.gov" ; 
+                :ncei_template_version = "NCEI_NetCDF_Grid_Template_v1.0" ; 
+                :license = "These data are openly available to the public. Please acknowledge the use of these 
+data with the text given in the acknowledgment attribute." ; 
+                :Metadata_Conventions = "Unidata Dataset Discovery v1.0" ; 
+                :metadata_link = "https://www.ncei.noaa.gov/products/world-ocean-atlas" ; 
+                :date_created = "2024-01-28 " ; 
+                :date_modified = "2024-01-28 " ; 
+                :_NCProperties = "version=2,netcdf=4.9.2,hdf5=1.14.3" ; 
+} 

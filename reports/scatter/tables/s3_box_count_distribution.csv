@@ -1,0 +1,2 @@
+slice,boxes >=1,boxes >=5,boxes >=10,boxes >=50,boxes >=100,boxes >=1000,median per occupied,mean per occupied,max,% ocean area with 0 profiles,% ocean area with >=10
+"all years, all months",1806,1554,1398,1008,789,83,69.0,229.35825027685493,19811,87.21576763485477,6.809128630705394

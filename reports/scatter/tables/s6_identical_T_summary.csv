@@ -1,0 +1,3 @@
+min valid levels,profiles considered,identical-T groups (size>=2),profiles in such groups,redundant copies (profiles - groups),largest group,"groups: same lat,lon,time","groups: same lat,lon, different time",groups: different position
+1,414221,5712,22097,16385,71,891,100,4721
+5,370676,1694,3751,2057,19,852,46,796
