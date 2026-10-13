@@ -13,7 +13,7 @@ class SphereNeighbors:
     Targets are processed in chunks so memory stays bounded for 555 km radii at the surface.
     """
 
-    def __init__(self, obs_lon, obs_lat, tgt_lon, tgt_lat, chunk: int = 8000):
+    def __init__(self, obs_lon, obs_lat, tgt_lon, tgt_lat, chunk: int = 1000):
         self.obs_xyz = lonlat_to_xyz(obs_lon, obs_lat)
         self.tgt_xyz = lonlat_to_xyz(np.ravel(tgt_lon), np.ravel(tgt_lat))
         self.tree = cKDTree(self.obs_xyz) if len(self.obs_xyz) else None
