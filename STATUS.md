@@ -1,5 +1,9 @@
 # Status log (newest first)
 
+## 2026-10-13 09:05
+- Scatter report done: `reports/scatter/scatter_report.md` (20 figures, 45 tables). Note: in the LOCI land mask 255=ocean, 0=land.
+- Faithful port: valid-cell counts match published exactly; monthly T RMSE vs published 0.6 C (50 m), 0.4 C (100 m), 0.13 C (700 m). Investigating residual (data/QC version).
+
 ## 2026-10-13 09:00
 - Repo set up. Data downloaded: AOTD scatter 1983-2023, published climatology, WOA23 decav91C0 T/S (monthly/seasonal/annual), EASE2 N25km ancillary files.
 - Code: io, geo (WOA, upstream, EASE2 25 km grids), neighbour search, faithful MATLAB port.

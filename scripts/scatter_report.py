@@ -156,7 +156,8 @@ import xarray as xr
 PROJ_CRS = pyproj.CRS.from_epsg(6931)
 TR = pyproj.Transformer.from_crs("EPSG:4326", PROJ_CRS, always_xy=True)
 EDIR = ROOT / "data" / "ease2"
-# land mask: uint8 720x720, rows top (y decreasing) to bottom; 0 ocean, 101 coast/lake, 254 off-earth, 255 land
+# land mask: uint8 720x720, rows top (y decreasing) to bottom. Verified against the shipped PNG and the profile positions:
+# 255 = ocean/water, 0 = land, 101 = Greenland ice sheet / land-ice, 254 = off-earth (the brief had 0 and 255 swapped)
 LMASK = np.fromfile(EDIR / "EASE2_N25km.LOCImask_land50_coast0km.720x720.bin", dtype="uint8").reshape(720, 720)
 _l = xr.open_dataset(EDIR / "NSIDC0772_LatLon_EASE2_N25km_v1.1.nc")
 ELAT = _l["latitude"].values
@@ -185,8 +186,8 @@ CLON = np.asarray(CLON)
 CLAT = np.asarray(CLAT)
 ece = E0 + CELL * np.arange(NE + 1)  # 25 km cell edges, ascending
 ecc = 0.5 * (ece[1:] + ece[:-1])
-EOCEAN = (LMASK == 0) & (np.nan_to_num(ELAT, nan=-90) >= 60)  # ocean cells north of 60N (rows y descending)
-ELAND = np.isin(LMASK, [101, 255])
+EOCEAN = (LMASK == 255) & (np.nan_to_num(ELAT, nan=-90) >= 60)  # ocean cells north of 60N (rows y descending)
+ELAND = np.isin(LMASK, [0, 101])
 
 
 def bcount(mask=None, idx=None):
@@ -501,7 +502,6 @@ add(2, "## 2. Temporal distribution\n",
     f"water (see section 6 for the inferred platform types).\n")
 log("section 2 done")
 
-# <<APPEND>>
 # ============================================================================= SECTION 3: space
 log("section 3")
 THR = [1, 5, 10, 50, 100, 1000]
@@ -643,7 +643,7 @@ add(3, "## 3. Spatial distribution\n",
     f"Profiles were binned on a 100 km x 100 km grid that is an exact 4x4 block aggregation of the NSIDC EASE-Grid 2.0 "
     f"North 25 km grid (EPSG:6931, Lambert azimuthal equal area, so every box has the same area; {NB}x{NB} boxes cover the "
     f"hemisphere, all profiles are north of 60N). Ocean area is taken from the EASE2 25 km land mask "
-    f"(`EASE2_N25km.LOCImask_land50_coast0km`, value 0 = ocean, 625 km2 per cell, cells north of 60N): {K['ocean_area_mkm2']:.2f} million km2 in "
+    f"(`EASE2_N25km.LOCImask_land50_coast0km`, value 255 = water in the file, as verified against its PNG legend and profile positions; 625 km2 per cell, cells north of 60N): {K['ocean_area_mkm2']:.2f} million km2 in "
     f"{K['n_ocean_boxes']:,} boxes containing any ocean. This includes marginal seas such as Hudson Bay, the Baltic, "
     f"Gulf of Alaska and the parts of the Sea of Okhotsk north of 60N, so the 'ocean without data' fraction counts every one of "
     f"them. {occ_nonocean} occupied boxes contain no ocean cell of that mask (coastal/land boxes).\n",
@@ -1389,4 +1389,363 @@ add(6, "## 6. Sampling patterns and INFERRED provenance\n",
     f"(in {K['ident_groups5']:,} groups). Largest groups: `tables/s6_identical_T_top_groups.csv`.\n")
 log("section 6 done")
 
-# <<APPEND>>
+# ============================================================================= SECTION 7: data quality
+log("section 7: gsw quality checks (all profiles, chunked)")
+BANDS = [("0-50 m", 0, 50), ("50-200 m", 50, 200), ("200-700 m", 200, 700), ("700-1500 m", 700, 1500),
+         ("1500-3000 m", 1500, 3000), ("3000-5500 m", 3000, 5501)]
+fig, axs = plt.subplots(2, 6, figsize=(17, 6))
+rows = []
+for k, (lab, a, b) in enumerate(BANDS):
+    lv = (depth >= a) & (depth < b)
+    tv = T[:, lv][vT[:, lv]]
+    sv = S[:, lv][vS[:, lv]]
+    axs[0, k].hist(tv, bins=100, color="C0")
+    axs[0, k].set_yscale("log")
+    axs[0, k].set_title(lab)
+    axs[0, k].set_xlabel("temperature (degC)")
+    axs[1, k].hist(sv, bins=100, color="C1")
+    axs[1, k].set_yscale("log")
+    axs[1, k].set_xlabel("salinity (PSS-78)")
+    rows.append({"depth band": lab, "T obs": tv.size, "T mean": tv.mean(), "T std": tv.std(), "T min": tv.min(),
+                 "T p1": np.percentile(tv, 1), "T p99": np.percentile(tv, 99), "T max": tv.max(),
+                 "S obs": sv.size, "S mean": sv.mean(), "S std": sv.std(), "S min": sv.min(),
+                 "S p1": np.percentile(sv, 1), "S p99": np.percentile(sv, 99), "S max": sv.max()})
+axs[0, 0].set_ylabel("count (log)")
+axs[1, 0].set_ylabel("count (log)")
+fig.suptitle("Histograms of T (top) and S (bottom) per depth band, all profiles")
+f7a = savefig(fig, "s7a_hist_TS_per_band", "T and S histograms per depth band")
+t_band = pd.DataFrame(rows)
+savetab(t_band, "s7_TS_stats_per_depth_band")
+
+THR_INV = [0.001, 0.01, 0.03, 0.1]
+inv_cnt = np.zeros((len(THR_INV), NZ - 1), np.int64)
+pair_cnt = np.zeros(NZ - 1, np.int64)
+prof_inv = np.zeros((len(THR_INV), N), bool)
+prof_has_pair = np.zeros(N, bool)
+frz_within = np.zeros(NZ, np.int64)
+frz_below = np.zeros(NZ, np.int64)
+frz_valid = np.zeros(NZ, np.int64)
+SAE = np.linspace(30.0, 38.0, 321)
+CTE = np.linspace(-2.2, 10.0, 489)
+H_TS = np.zeros((len(SAE) - 1, len(CTE) - 1), np.int64)
+CH = 20000
+for i0 in range(0, N, CH):
+    sl = slice(i0, min(N, i0 + CH))
+    Tc, Sc, Pc = T[sl].astype("float64"), S[sl].astype("float64"), P[sl].astype("float64")
+    SA = gsw.SA_from_SP(Sc, Pc, lon180[sl, None], lat[sl, None])
+    CT = gsw.CT_from_t(SA, Tc, Pc)
+    pm = 0.5 * (Pc[:, :-1] + Pc[:, 1:])
+    d_ = gsw.rho(SA[:, :-1], CT[:, :-1], pm) - gsw.rho(SA[:, 1:], CT[:, 1:], pm)  # >0: denser water above
+    ok = ~np.isnan(d_)
+    pair_cnt += ok.sum(0)
+    prof_has_pair[sl] = ok.any(1)
+    for j, th in enumerate(THR_INV):
+        m = ok & (d_ > th)
+        inv_cnt[j] += m.sum(0)
+        prof_inv[j, sl] = m.any(1)
+    tf = gsw.t_freezing(SA, Pc, 0.0)
+    dd = Tc - tf
+    okf = ~np.isnan(dd)
+    frz_valid += okf.sum(0)
+    frz_within += (okf & (np.abs(dd) <= 0.01)).sum(0)
+    frz_below += (okf & (dd < -0.01)).sum(0)
+    g = ~np.isnan(SA) & ~np.isnan(CT)
+    H_TS += np.histogram2d(SA[g], CT[g], bins=[SAE, CTE])[0].astype(np.int64)
+    del Tc, Sc, Pc, SA, CT, pm, d_, tf, dd
+log("  gsw done")
+n_pairs = int(pair_cnt.sum())
+t_inv = pd.DataFrame({"threshold rho(k)-rho(k+1) (kg/m3)": THR_INV,
+                      "adjacent-level pairs unstable": inv_cnt.sum(1),
+                      "% of pairs": 100 * inv_cnt.sum(1) / n_pairs,
+                      "profiles with >=1 unstable pair": prof_inv.sum(1),
+                      "% of profiles with S": 100 * prof_inv.sum(1) / hasS.sum()})
+savetab(t_inv, "s7_static_instability")
+bandsI = [("0-50 m", 0, 50), ("50-200 m", 50, 200), ("200-700 m", 200, 700), ("700-1500 m", 700, 1500), ("1500-5500 m", 1500, 5500)]
+rows = []
+for lab, a, b in bandsI:
+    lv = np.where((depth[:-1] >= a) & (depth[:-1] < b))[0]
+    rows.append({"upper level in band": lab, "pairs": int(pair_cnt[lv].sum()),
+                 **{f"% pairs > {th}": 100 * inv_cnt[j, lv].sum() / max(1, pair_cnt[lv].sum()) for j, th in enumerate(THR_INV)}})
+t_invb = pd.DataFrame(rows)
+savetab(t_invb, "s7_static_instability_per_band")
+t_invcls = pd.DataFrame({"class (INFERRED)": CLASSES,
+                         "profiles with S": [int((hasS & (pclass == c)).sum()) for c in CLASSES],
+                         "% unstable (>0.03 kg/m3)": [100 * (prof_inv[2] & (pclass == c)).sum() / max(1, (hasS & (pclass == c) & prof_has_pair).sum())
+                                                       for c in CLASSES]})
+savetab(t_invcls, "s7_static_instability_per_class")
+fig, axs = plt.subplots(1, 2, figsize=(11, 5), sharey=True)
+for j, th in enumerate(THR_INV):
+    axs[0].plot(100 * inv_cnt[j] / np.maximum(pair_cnt, 1) + 1e-4, depth[:-1], label=f"> {th} kg/m3")
+axs[0].set_xscale("log")
+axs[0].invert_yaxis()
+axs[0].set_xlabel("% of adjacent-level pairs unstable (+1e-4)")
+axs[0].set_ylabel("depth of upper level (m)")
+axs[0].set_title("(a) static instability by depth")
+axs[0].legend()
+axs[1].plot(100 * frz_within / np.maximum(frz_valid, 1), depth, label="|T - T_freeze| <= 0.01")
+axs[1].plot(100 * frz_below / np.maximum(frz_valid, 1), depth, label="T < T_freeze - 0.01")
+axs[1].set_xscale("symlog", linthresh=0.01)
+axs[1].set_xlabel("% of valid T values")
+axs[1].set_title("(b) values at / below the freezing point")
+axs[1].legend()
+f7b = savefig(fig, "s7b_instability_freezing", "Static instability and freezing-point values by depth")
+fz = pd.DataFrame({"level": np.arange(NZ), "depth_m": depth, "valid_T_with_S": frz_valid, "within_0.01_of_Tfreeze": frz_within,
+                   "below_Tfreeze_minus_0.01": frz_below})
+savetab(fz, "s7_freezing_point_per_level")
+n_within, n_below, n_fv = int(frz_within.sum()), int(frz_below.sum()), int(frz_valid.sum())
+n_Tm2 = int((T == -2.0).sum())
+
+# T-S diagram
+fig, ax = plt.subplots(figsize=(8, 7))
+Hm = np.ma.masked_equal(H_TS, 0)
+mm = ax.pcolormesh(SAE, CTE, Hm.T, norm=LogNorm(vmin=1, vmax=H_TS.max()), cmap="viridis", rasterized=True)
+cs_s, cs_t = np.meshgrid(np.linspace(30, 38, 120), np.linspace(-2.2, 10, 120))
+sg = gsw.sigma0(cs_s, cs_t)
+cc_ = ax.contour(cs_s, cs_t, sg, levels=np.arange(22, 29, 0.5), colors="k", linewidths=0.5)
+ax.clabel(cc_, fmt="%.1f", fontsize=7)
+ax.set_xlim(30, 36)
+ax.set_ylim(-2.2, 10)
+ax.set_xlabel("Absolute salinity SA (g/kg)")
+ax.set_ylabel("Conservative temperature CT (degC)")
+ax.set_title("T-S diagram, all valid levels (colour: count, log); contours: sigma0 (kg/m3)")
+cb = fig.colorbar(mm, ax=ax)
+cb.set_label("number of observations")
+f7c = savefig(fig, "s7c_TS_diagram", "T-S density diagram")
+K["TS_n"] = int(H_TS.sum())
+
+# spikes
+dz = np.diff(depth)
+gT = np.abs(np.diff(T, axis=1)) / dz
+gS = np.abs(np.diff(S, axis=1)) / dz
+nP_T = int((~np.isnan(gT)).sum())
+nP_S = int((~np.isnan(gS)).sum())
+spT, spS = gT > 0.3, gS > 0.2
+K["spike_T_prof"], K["spike_S_prof"] = int(spT.any(1).sum()), int(spS.any(1).sum())
+t_spk = pd.DataFrame([
+    {"test": "|dT/dz| > 0.3 degC/m between adjacent valid levels", "pairs flagged": int(spT.sum()), "% of pairs": 100 * spT.sum() / nP_T,
+     "profiles flagged": K["spike_T_prof"], "% of profiles (with T)": 100 * K["spike_T_prof"] / hasT.sum()},
+    {"test": "|dS/dz| > 0.2 per m between adjacent valid levels", "pairs flagged": int(spS.sum()), "% of pairs": 100 * spS.sum() / nP_S,
+     "profiles flagged": K["spike_S_prof"], "% of profiles (with T)": 100 * K["spike_S_prof"] / hasS.sum()},
+])
+t_spk = t_spk.rename(columns={"% of profiles (with T)": "% of profiles (with T resp. S)"})
+savetab(t_spk, "s7_spikes")
+spk_depth = pd.DataFrame({"upper_depth_m": depth[:-1], "T_pairs_flagged": spT.sum(0), "S_pairs_flagged": spS.sum(0)})
+savetab(spk_depth, "s7_spikes_per_level")
+del gT, gS, spT, spS
+
+# mean/std per level and water masses
+fig, axs = plt.subplots(1, 4, figsize=(15, 6), sharey=True)
+lvl_tab = {"depth_m": depth[:NL57]}
+for nm, msk, col, key in (("Central Arctic (>80N)", CENTRAL, "C3", "central"), ("Nordic seas", NORDIC, "C0", "nordic")):
+    for v, arr0, ai in (("T", T, 0), ("S", S, 2)):
+        arr = arr0[msk][:, :NL57]
+        mu, sd = np.nanmean(arr, 0), np.nanstd(arr, 0)
+        lvl_tab[f"{key}_{v}_n"] = np.sum(~np.isnan(arr), 0)
+        lvl_tab[f"{key}_{v}_mean"] = mu
+        lvl_tab[f"{key}_{v}_std"] = sd
+        axs[ai].plot(mu, depth[:NL57], color=col, label=nm)
+        axs[ai].fill_betweenx(depth[:NL57], mu - sd, mu + sd, color=col, alpha=0.2)
+        axs[ai + 1].plot(sd, depth[:NL57], color=col, label=nm)
+axs[0].set_xlabel("mean T (degC)")
+axs[1].set_xlabel("std of T (degC)")
+axs[2].set_xlabel("mean S (PSS-78)")
+axs[3].set_xlabel("std of S")
+axs[0].invert_yaxis()
+axs[0].set_ylabel("depth (m)")
+axs[0].legend(fontsize=7)
+fig.suptitle("Mean +/- std (shaded) of T and S at the 57 levels 0-1500 m")
+f7d = savefig(fig, "s7d_mean_std_profiles", "Mean and std profiles in central Arctic and Nordic seas")
+savetab(pd.DataFrame(lvl_tab), "s7_mean_std_57_levels_central_nordic")
+WM = [("Polar Mixed Layer (0-50 m)", 0, 50), ("Halocline (50-200 m)", 50, 200), ("Atlantic layer (200-900 m)", 200, 900),
+      ("Intermediate (900-2000 m)", 900, 2000), ("Deep / bottom water (>=2000 m)", 2000, 5501)]
+rows = []
+for nm, msk in (("Central Arctic >80N", CENTRAL), ("Nordic seas", NORDIC)):
+    for wl, a, b in WM:
+        lv = (depth >= a) & (depth < b)
+        tv = T[msk][:, lv]
+        sv = S[msk][:, lv]
+        tv, sv = tv[~np.isnan(tv)], sv[~np.isnan(sv)]
+        rows.append({"region": nm, "layer (nominal depth range)": wl, "T obs": tv.size,
+                     "T mean": tv.mean() if tv.size else np.nan, "T std": tv.std() if tv.size else np.nan,
+                     "S mean": sv.mean() if sv.size else np.nan, "S std": sv.std() if sv.size else np.nan})
+t_wm = pd.DataFrame(rows)
+savetab(t_wm, "s7_water_mass_layers")
+
+add(7, "## 7. Data-quality descriptors of what remains\n",
+    "All statistics use the normalised arrays (NaN = missing). Temperature is treated as in-situ temperature and salinity as practical "
+    "salinity (an assumption: the files do not state it). Pressure comes from the per-profile `pres` array. Seawater properties were "
+    f"computed with `gsw` for **all {int(hasS.sum()):,} profiles with S** (no sub-sampling), in chunks of 20,000 profiles.\n",
+    "### 7.1 T and S per depth band\n", f7a, mdtable(t_band, dec=2),
+    "### 7.2 Static stability\n",
+    "For each pair of adjacent valid levels the in-situ densities of both parcels were compared at the mid-pressure "
+    "(`gsw.rho(SA, CT, p_mid)`); a pair is *unstable* if the upper parcel is denser than the lower by more than the stated threshold. "
+    "Because the data are on a standard-depth grid, small inversions can reflect real mixed-layer noise or interpolation, "
+    "so several thresholds are reported.\n",
+    mdtable(t_inv, dec=3), mdtable(t_invb, dec=3),
+    f"Out of {n_pairs:,} adjacent-level pairs, {t_inv.iloc[1, 2]:.3f}% exceed 0.01 kg/m3 and "
+    f"{t_inv.iloc[2, 2]:.3f}% exceed 0.03 kg/m3. {t_inv.iloc[1, 4]:.2f}% of profiles with S have at least one pair above 0.01 kg/m3 "
+    f"and {t_inv.iloc[2, 4]:.2f}% above 0.03 kg/m3.\n",
+    "**By INFERRED class** (class is a heuristic label)\n", mdtable(t_invcls, dec=2),
+    "### 7.3 Freezing point and spikes\n", f7b,
+    f"* Values within +/-0.01 degC of the in-situ freezing temperature (`gsw.t_freezing(SA, p, 0)`): **{n_within:,}** "
+    f"({pct(n_within, n_fv, 2)} of {n_fv:,} valid T values with S); values more than 0.01 degC below freezing: {n_below:,} "
+    f"({pct(n_below, n_fv, 3)}). Exactly T = -2.0 degC: {n_Tm2:,} values (the data minimum is {K['T_min']:.2f} degC).\n",
+    mdtable(t_spk, dec=3),
+    "Per-level counts: `tables/s7_spikes_per_level.csv`, `tables/s7_freezing_point_per_level.csv`.\n",
+    "### 7.4 T-S diagram\n", f7c,
+    f"The diagram holds {K['TS_n']:,} observations (all valid levels, in the plotted SA/CT window). Outliers are not removed.\n",
+    "### 7.5 Mean and spread of T and S, 0-1500 m, in two basins\n", f7d,
+    "Central Arctic = the 'Central Arctic (>80N ...)' region of Section 5; Nordic seas = the Fram Strait/Greenland Sea, Iceland Sea and "
+    "Norwegian Sea regions. The spread mixes years, seasons and locations and is not a measurement error.\n",
+    "**Nominal water-mass layers by depth range** (fixed depth boundaries, not property-defined)\n", mdtable(t_wm, dec=2))
+log("section 7 done")
+
+# ============================================================================= SECTION 8: fitness for purpose
+log("section 8")
+LV = {z: int(np.where(depth == z)[0][0]) for z in (10, 100, 300, 500, 700, 2000)}
+OCN = OCEAN_BOX
+HIGH = (CLAT.ravel() >= 70) & OCN
+QMASK = {q: np.isin(month, m) for q, m in SEASONS_WOA.items()}
+
+
+def covA(pm, lv, thr=10, region=None):
+    c = np.bincount(cell[pm & vT[:, lv]], minlength=NC)
+    ok = (c >= thr) & OCN
+    if region is None:
+        return 100 * area_frac(ok)
+    return 100 * OCEAN_AREA[ok & region].sum() / OCEAN_AREA[region].sum()
+
+
+allp = np.ones(N, bool)
+q500 = {q: covA(QMASK[q], LV[500]) for q in QMASK}
+q10 = {q: covA(QMASK[q], LV[10]) for q in QMASK}
+m1 = float(np.mean(list(q500.values())))
+m4 = float(np.mean(list(q10.values())))
+m2 = covA(allp, LV[300], region=HIGH)
+m3 = covA(allp, LV[2000])
+c100S = np.bincount(cell[vS[:, LV[100]]], minlength=NC)
+m5 = 100 * area_frac((c100S >= 10) & OCN)
+m6 = 100 * area_frac((nyr >= 10) & OCN)
+cen_m = []
+for mth in range(1, 13):
+    pm = CENTRAL & (month == mth) & (maxdepth >= 200)
+    cen_m.append((MONTH_NAMES[mth - 1], int(pm.sum()), int(len(np.unique(year[pm]))), int(len(np.unique(year[CENTRAL & (month == mth)])))))
+t_cen = pd.DataFrame(cen_m, columns=["month", "central-Arctic profiles reaching >=200 m", "distinct years (those profiles)",
+                                     "distinct years (any central profile)"])
+savetab(t_cen, "s8_central_arctic_monthly")
+cen_ok = (t_cen.iloc[:, 1] >= 100) & (t_cen.iloc[:, 2] >= 10)
+m7 = 100 * float(cen_ok.sum()) / 12
+EUL = (nyr >= 10) & (nmo >= 6) & (cnt >= 100)
+m8 = 100 * area_frac(EUL & OCN)
+n_fixed = int(is_fixed.sum())
+m9 = 100 * K["g1_ge10"]
+c700d = [100 * area_frac((np.bincount(cell[(maxdepth >= 700) & (dec_idx == i)], minlength=NC) >= 10) & OCN) for i in range(4)]
+m10 = 100 * area_frac((np.bincount(cell[maxdepth >= 700], minlength=NC) >= 10) & OCN)
+
+
+def rate(v):
+    return "Good" if v >= 60 else ("Marginal" if v >= 20 else "Poor")
+
+
+FIT = [
+    ("Gridded climatology 0-1500 m (monthly/seasonal)", m1,
+     "mean over the 4 WOA quarters of the % of 60-90N ocean area with >=10 T profiles at 500 m; by quarter: "
+     + ", ".join(f"{q} {v:.0f}%" for q, v in q500.items())),
+    ("Regional climatology of the Atlantic layer (north of 70N)", m2,
+     f"% of ocean area >70N with >=10 profiles at 300 m (all years); {int(t_cen.iloc[:, 1].sum()):,} central-Arctic profiles reach >=200 m"),
+    ("Basin-scale deep (>2000 m) analysis", m3,
+     f"% of 60-90N ocean area with >=10 profiles at 2000 m (denominator includes shelves shallower than 2000 m, so a lower bound); "
+     f"{K['prof_deep']:,} profiles ({pct(K['prof_deep'], N, 1)}) have data below 1500 m"),
+    ("Mixed layer / near-surface (0-50 m)", m4,
+     "mean over quarters of % ocean area with >=10 profiles at 10 m (0 m is empty, 5 m partly filled); by quarter: "
+     + ", ".join(f"{q} {v:.0f}%" for q, v in q10.items())),
+    ("Halocline structure (50-200 m; needs S)", m5, "% ocean area with >=10 S profiles at 100 m (all years)"),
+    ("Interannual variability / trends", m6,
+     "% ocean area sampled in >=10 distinct years (not accounting for profiles per year or season)"),
+    ("Seasonal cycle in the central Arctic", m7,
+     f"% of calendar months with >=100 central-Arctic profiles reaching >=200 m from >=10 distinct years; {int(cen_ok.sum())} of 12 months pass"),
+    ("Eulerian time series at a point", m8,
+     f"% ocean area in 100 km boxes with >=100 profiles, >=10 years, >=6 calendar months; INFERRED fixed-point series: {n_fixed}"),
+    ("Validation of models/reanalyses (point-wise, 1 deg)", m9, "% of 1 deg ocean cells north of 60N with >=10 profiles (all years, all depths)"),
+    ("Ocean heat content 0-700 m", m10,
+     "% ocean area with >=10 profiles reaching >=700 m (all years); by decade: " + ", ".join(f"{l} {v:.0f}%" for l, v in zip(DEC_LAB, c700d))),
+]
+NOTES = {
+    FIT[0][0]: "Needs large influence radii/smoothing; unconstrained in many boxes in at least one season.",
+    FIT[1][0]: "Best in Eurasian Basin and Nordic seas where drifting-platform and ship profiles are dense.",
+    FIT[2][0]: "Deep data come mostly from ship CTD casts, mainly summer; Argo-like profiles stop at ~2000 m.",
+    FIT[3][0]: "0 m is empty and 5 m only ~67% filled; summer/ice-free sampling bias dominates.",
+    FIT[4][0]: "Best-covered layer; fine vertical spacing, many INFERRED ITP-like profiles in the basins after 2004.",
+    FIT[5][0]: "Coverage shifts from sparse ship sections to drifting platforms and Argo, changing place and season.",
+    FIT[6][0]: f"Passes the count rule, but only {pct((CENTRAL & (year < 2003)).sum(), CENTRAL.sum(), 1)} of central-Arctic profiles predate 2003; winter months rest on only ~15 years (mostly drifting platforms), so interannual and seasonal signals are confounded.",
+    FIT[7][0]: "Only few locations; most data are drifting or one-off stations.",
+    FIT[8][0]: "Subsample the model at the data locations/times instead of comparing with the mean state.",
+    FIT[9][0]: "Needs profiles that reach 700 m; shallow drifting-platform profiles reduce effective coverage.",
+}
+t_fit = pd.DataFrame([{"purpose": a, "metric (% ocean area)": b, "rating": rate(b), "metric definition / evidence": c,
+                       "comment": NOTES[a]} for a, b, c in FIT])
+savetab(t_fit, "s8_fitness_for_purpose")
+add(8, "## 8. Fitness for purpose\n",
+    "Ratings are computed by rule: each purpose has one coverage metric (percent of the "
+    f"{K['ocean_area_mkm2']:.1f} million km2 of 60-90N ocean in 100 km boxes meeting a stated sampling criterion). "
+    "**Good** >= 60 %, **Marginal** 20-60 %, **Poor** < 20 %. The metric is an upper-bound indicator of coverage "
+    "(it ignores seasonal, instrument and quality issues), so read each rating together with its comment. "
+    "The denominator includes marginal seas (Hudson Bay, Baltic, Gulf of Alaska, ...) and shelves, which lowers all percentages; "
+    "central-Arctic and Nordic-seas coverage is better than the area-wide numbers.\n",
+    mdtable(t_fit, dec=1),
+    "**Central Arctic by calendar month** (profiles reaching >=200 m)\n", mdtable(t_cen),
+    "### Prose summary\n",
+    f"* **Strengths.** {N:,} profiles with matched T and S; {K['frac_class']['ITP-like'] * 100:.0f}% of profiles are INFERRED ITP-like, giving "
+    "dense sampling of the ice-covered basins after 2004 for the upper few hundred metres.\n"
+    f"* **Weaknesses.** {pct(zero_area, 1)} of the 60-90N ocean area has no profile; only {pct(K['cov10_all'], 1)} has >=10 profiles; "
+    "sampling shifts strongly between sea-ice seasons and decades; deep data are sparse.\n"
+    "* **Recommendation.** Use the data for regional/sectional studies of the upper 700 m and halocline since 2004, process studies and "
+    "model comparison at profile locations. Use gridded climatologies, trend and deep-ocean studies only with an explicit "
+    "sampling-bias assessment.\n")
+log("section 8 done")
+
+# ============================================================================= assemble the markdown
+log("assembling markdown")
+yr_cnt = np.bincount(year, minlength=year.max() + 1)
+post05 = int((year >= 2005).sum())
+summer = int(np.isin(month, [6, 7, 8, 9]).sum())
+winter = int(np.isin(month, [12, 1, 2, 3]).sum())
+y_peak = int(np.argmax(yr_cnt))
+cls_txt = "; ".join(f"{c} {K['class_counts'][c]:,} ({pct(K['frac_class'][c], 1, 1)})" for c in CLASSES)
+EXEC = [
+    f"* **Size.** {N:,} profiles, {K['year_min']}-{K['year_max']}; {int(hasT.sum()):,} with T, {int(hasS.sum()):,} with S, {n_both:,} with both "
+    f"({pct(n_noS, hasT.sum(), 2)} of profiles with T have no S). Median {K['med_nlev']:.0f} valid levels; median maximum depth {K['med_maxdepth']:.0f} m.",
+    f"* **Depth.** Fraction reaching >=700 m: {pct((maxdepth >= 700).sum(), N)}; >=1500 m: {pct((maxdepth >= 1500).sum(), N)}; "
+    f">=3000 m: {pct((maxdepth >= 3000).sum(), N)}. The 0 m level is empty; 5 m is {pct(nT_lev[1], N, 0)} filled, 10 m {pct(nT_lev[2], N, 0)}.",
+    f"* **Time.** {pct(post05, N)} of the profiles are from 2005 onwards; peak year {y_peak} ({yr_cnt[y_peak]:,}). "
+    f"Jun-Sep holds {pct(summer, N)} of profiles, Dec-Mar {pct(winter, N)}.",
+    f"* **Space.** {pct(zero_area, 1)} of the {K['ocean_area_mkm2']:.1f} million km2 of 60-90N ocean (EASE2 100 km boxes) has no profile; "
+    f"{pct(K['cov10_all'], 1)} has >=10; {pct(K['nyr10_frac'], 1)} has data from >=10 distinct years.",
+    f"* **Inferred provenance (INFERRED, not ground truth).** {cls_txt}.",
+    f"* **Duplicates.** {K['dup6_pairs']:,} pairs still within 0.1 deg / 6 h ({K['dup1km_pairs']:,} pairs within 1 km / 1 h); "
+    f"{K['ident_redundant5']:,} redundant exact copies with >=5 valid levels.",
+    f"* **Quality.** {t_inv.iloc[1, 4]:.1f}% of profiles have a static inversion >0.01 kg/m3; {K['spike_T_prof']:,} profiles have a T step >0.3 degC/m; "
+    f"{pct(n_within, n_fv, 2)} of T values are within 0.01 degC of freezing.",
+    "* **Fitness (by rule, Section 8).** " + "; ".join(f"{a.split(' (')[0]}: {rate(b)}" for a, b, _ in FIT) + ".",
+]
+HEAD = [
+    "# AOTD scattered (profile) data: descriptive report\n",
+    f"*Generated {GEN_DATE} by `scripts/scatter_report.py`. All numbers are computed from `data/scatter_all.npz` "
+    "(the normalised cache of the yearly files; NaN = missing for T, S, pressure and density).*\n",
+    "## Executive summary\n", "\n".join(EXEC) + "\n",
+    "## Data notes and conventions\n",
+    "* Missing values: the raw yearly files encode missing S and pressure as 0.0 and density arbitrarily; the loader/cache normalises these "
+    "to NaN and this report uses only the normalised arrays.\n"
+    f"* T and S are always valid together ({int(vT.sum()):,} valid T/S level-values). The 0 m level has no T or S in any profile.\n"
+    "* There is no platform/source field in the files. Anything labelled *INFERRED* is a heuristic guess from sampling patterns "
+    "and is not ground truth.\n"
+    "* Boxes: 100 km x 100 km blocks of the EASE-Grid 2.0 North grid (EPSG:6931); land from the EASE2 land mask.\n"
+    "* Regions are simple longitude/latitude polygons defined in the script (Section 5).\n",
+]
+parts = HEAD
+for i in range(1, 9):
+    parts += SEC[i]
+parts += ["## Appendix: tables written\n", "\n".join(f"* `tables/{n}`" for n in sorted(set(TABLES_WRITTEN))) + "\n"]
+(OUT / "scatter_report.md").write_text("\n".join(parts))
+log(f"done: wrote {OUT / 'scatter_report.md'}")
+
