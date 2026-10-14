@@ -40,6 +40,7 @@ def test_sparse_percentages_condition_on_positive_counts(monkeypatch):
         {
             "Theta_n": (("depth", "y", "x"), [[[0, 1, 4, 30]], [[0, 0, 0, 0]]]),
             "Theta_n_eff": (("depth", "y", "x"), [[[0, 1, 2, 10]], [[0, 0, 0, 0]]]),
+            "Theta_n_epochs": (("depth", "y", "x"), [[[0, 1, 2, 6]], [[0, 0, 0, 0]]]),
             "Theta_n_years": (("depth", "y", "x"), [[[0, 1, 2, 5]], [[0, 0, 0, 0]]]),
         },
         coords={"depth": [10, 50]},
@@ -47,8 +48,8 @@ def test_sparse_percentages_condition_on_positive_counts(monkeypatch):
     monkeypatch.setattr(spread, "load", lambda *args: ds.copy(deep=True))
     monkeypatch.setattr(spread, "DEPTHS", (10, 50))
     text = spread.counts_table()
-    assert "| 10 | 35 | 13 | 2 | 3 (2) | 66.7 | 66.7 |" in text
-    assert "| 50 | 0 | 0 | – | 0 (0) | – | – |" in text
+    assert "| 10 | 35 | 13 | 9 | 2 | 3 (2 / 2) | 66.7 | 66.7 |" in text
+    assert "| 50 | 0 | 0 | 0 | – | 0 (0 / 0) | – | – |" in text
 
 
 def test_reference_statistics_use_finite_intersection_and_area_weights():

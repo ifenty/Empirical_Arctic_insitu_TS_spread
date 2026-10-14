@@ -4,10 +4,14 @@
 Oct 14, 2026
 
 This repository summarizes Arctic in situ temperature and salinity differences from
-two published reference climatologies: WOA23 and AOTD. It produces per-cell **empirical
-RMSE, sample standard deviation (`ddof=1`), mean offset, comparison count (`n`),
-effective sampling-day count (`n_eff`) and distinct year count (`n_years`)**, on a 100 km
-EASE-Grid 2.0 North grid (EPSG:6931) at 102 WOA standard depths.
+two published reference climatologies: WOA23 and AOTD. At each 100 km EASE-Grid 2.0
+North cell (EPSG:6931) and 102 WOA standard depths, it provides three estimators of
+spread:
+* **Profile-weighted (`*_rmse`, `*_std`, `*_bias`):** equal weight (`1/n`) per profile value, with sample `std` (`ddof=1`),
+* **Epoch-declustered (`*_std_declustered`, `*_rmse_declustered`, `*_bias_declustered`, `*_std_within`, `*_std_between`):** equal weight (`1/M`) per 1-month synoptic epoch `(cell, year, month)` with within-epoch variance restoration,
+* **Empirical Bayes regularized (`*_std_se`, `*_rmse_se`):** shrinks the epoch-declustered variance in sparsely sampled cells ($\nu_0 = 5$ epochs) toward a 500 km local moving-window prior (plus `*_se_pan_arctic` using a single pan-Arctic prior for comparison),
+together with raw comparison count (`n`), sampling-day count (`n_eff`), 1-month epoch
+count (`n_epochs`), and distinct year count (`n_years`).
 
 The analysis pools profiles from 1992 onward, comparing each value with its reference
 climatology **bilinearly interpolated in space and linearly interpolated in time**
@@ -113,16 +117,15 @@ Files in `outputs/expected_spread/` follow this pattern:
 expected_{std,rmse}_from_{woa23,aotd,woa23_and_aotd}_{potential_temperature,salinity}_ease2_100km.nc
 ```
 
-Dimensions are `(depth=102, y=180, x=180)`. Variables are `Theta_std`/`Theta_rmse`
-or `S_std`/`S_rmse`, plus the associated `*_bias`, `*_n` (raw comparison count),
-`*_n_eff` (distinct `(cell, UTC day)` sampling days, a de-clustered count proxy),
-`*_n_years` (distinct calendar years 1992–2023), geographic coordinates and
-EPSG:6931 CRS metadata. AOTD comparisons exist only at 0–1500 m; below that, the
-combined product equals WOA23. Its bias and count fields follow the reference
-selected for **that file's metric**; std and RMSE can select different references.
-Raw counts `n` overstate independent sample sizes due to drifting platforms and
-synoptic sections; sample `std` uses `ddof=1` and is `NaN` when `n < 2`. See the
-[technical note](technical_note.md#3-calculation) before use.
+Dimensions are `(depth=102, y=180, x=180)`. Each file contains:
+* **Profile-weighted:** metric (`Theta_std`/`Theta_rmse` or `S_std`/`S_rmse`) and mean offset (`*_bias`),
+* **Epoch-declustered (1-month synoptic epochs):** `*_std_declustered` / `*_rmse_declustered`, `*_bias_declustered`, `*_std_within` (intra-month sub-grid/instrument spread), and `*_std_between` (inter-epoch synoptic/interannual spread),
+* **Empirical Bayes regularized (for state estimation):** `*_std_se` / `*_rmse_se` (Empirical Bayes shrinkage with $\nu_0 = 5$ epochs toward a **500 km local moving-window median prior** across neighboring cells with `n_epochs >= 5`, defined for all sampled cells `n_epochs >= 1`), plus `*_std_se_pan_arctic` / `*_rmse_se_pan_arctic` (single pan-Arctic depth-level prior for comparison),
+* Sampling counts: `*_n` (raw comparison count), `*_n_eff` (distinct `(cell, UTC day)` sampling days), `*_n_epochs` (distinct `(cell, year, month)` 1-month synoptic epochs), and `*_n_years` (distinct calendar years 1992–2023),
+* Geographic coordinates (`lat`, `lon`) and EPSG:6931 CRS metadata (`crs`).
+
+AOTD comparisons exist only at 0–1500 m; below that, the combined product equals WOA23.
+See the [technical note](technical_note.md#3-calculation) before use.
 
 ## Repository layout and scope
 

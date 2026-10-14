@@ -15,21 +15,44 @@ scripts 05–07, not solely by the spread computation in script 03:
 
 ## 1. Purpose and scope
 
-The analysis describes how individual Arctic profile values differ from published
-monthly or seasonal climatologies. Differences are pooled within 100 km EASE-Grid
-2.0 North cells (EPSG:6931) and at 102 WOA standard depth levels, from 0 to 5500 m.
-There is no output time dimension. Both RMSE about the reference (`n >= 1`) and
-**sample standard deviation (`ddof=1`, `n >= 2`)** about the cell's mean difference
-are provided, together with raw comparison counts (`n`), de-clustered sampling-day
-counts (`n_eff`) and distinct year counts (`n_years`).
+Ocean state estimation and data assimilation require prior estimates of how far an
+individual in situ profile observation is expected to depart from a reference
+climatology or background state, as a function of location and depth. In the Arctic
+Ocean, constructing such estimates directly from historical profiles is complicated
+by severe **temporal sampling heterogeneity**: drifting Ice-Tethered Profilers (ITPs)
+and dense shipboard surveys can collect dozens to hundreds of profiles within a single
+100 km cell over a single month, whereas other cells are visited only a few times across
+several decades. Simple profile-weighted (`1/n`) pooling allows single-month bursts to
+dominate the cell mean and underestimate multi-year variability, while leaving sparsely
+sampled cells (`M = 1–4` epochs) noisy or undefined.
 
-These are **empirical mismatch statistics**, not a decomposition of observation
-error or a validated predictive uncertainty model. They can inform the assessment
-of variability and reference sensitivity, but assimilation weights or forecast
-confidence bounds require minimum-count filtering (e.g. on `n_eff` and `n_years`),
-spatial regularization across unsampled cells, and a treatment of correlated errors.
-Cells without sufficient finite comparisons remain NaN; no interpolation, smoothing
-or filling of the resulting spread fields is performed.
+To address both raw empirical description and ocean state estimation, this analysis
+evaluates profile-minus-climatology departures (1992–2023, using bilinear spatial and
+linear temporal interpolation of the reference climatologies) within 100 km EASE-Grid
+2.0 North cells (EPSG:6931; 180 × 180 grid) at the 102 WOA standard depth levels
+(0–5500 m, no output time dimension) using three complementary estimators:
+
+* **Profile-weighted statistics (`*_rmse`, `*_std`, `*_bias`):** Equal weight (`1/n`)
+  per finite comparison value, using sample standard deviation (`ddof=1`, `NaN` for
+  `n < 2`) and RMSE (`NaN` for `n < 1`).
+* **Epoch-declustered statistics (`*_std_declustered`, `*_rmse_declustered`, `*_bias_declustered`, `*_std_within`, `*_std_between`):**
+  Groups observations in each `(100 km cell, depth)` into **1-month synoptic epochs**
+  `(year, month)` (count `M = n_epochs`, assuming a ~30-day Arctic synoptic/eddy
+  decorrelation timescale), weighting each epoch equally (`1/M`) and applying the Law
+  of Total Variance to separate sub-monthly within-epoch spread (`*_std_within`) from
+  inter-epoch synoptic/interannual spread (`*_std_between`) while restoring total
+  single-observation variance (`NaN` for `M < 2` in `std_declustered`).
+* **Empirical Bayes (EB) regularized statistics (`*_std_se`, `*_rmse_se`, plus `*_se_pan_arctic` for comparison):**
+  Shrinks the epoch-declustered variance in low-`M` cells (`nu_0 = 5` epochs) toward
+  a **local 500 km circular moving-window median prior** computed from neighboring
+  well-sampled cells (`M >= 5`), providing a regime-preserving, non-degenerate spread
+  estimate for every sampled cell (`M >= 1`). A comparison variant (`*_se_pan_arctic`)
+  uses a single horizontally uniform pan-Arctic depth-level prior.
+
+All products also record raw comparison counts (`*_n`), de-clustered sampling-day
+counts (`*_n_eff`), 1-month epoch counts (`*_n_epochs`), and distinct calendar-year
+counts (`*_n_years`). Unsampled cells (`n = 0`) remain `NaN`; no interpolation or
+extrapolation into unsampled cells is performed.
 
 ## 2. Data and assumptions
 
@@ -133,7 +156,7 @@ For each selected profile and standard depth:
    distinct `(100 km cell, UTC calendar day)` sampling days `n_eff`, and the number
    of distinct calendar years `n_years` across 1992–2023. Missing observations or
    reference values do not contribute.
-5. **Statistics.** For each cell and depth:
+5. **Profile-weighted statistics (`*_rmse`, `*_std`, `*_bias`).** For each cell and depth:
 
    ```text
    bias = Σd / n                                          (for n >= 1; NaN for n = 0)
@@ -145,15 +168,45 @@ For each selected profile and standard depth:
    assigned `NaN` rather than zero so they cannot cause zero-variance division errors
    in downstream weighting. The non-negative clamp protects against floating-point
    round-off when all values in a cell are identical.
-6. **Reference-sensitivity envelope.** The combined product takes a NaN-ignoring
-   elementwise maximum of the two reference-based **metrics**. With one finite
-   reference it uses that reference; with neither, it is NaN. Below 1500 m it
-   equals WOA23. Associated `bias`, `n`, `n_eff` and `n_years` follow the winning
-   reference separately for `std` and `RMSE`. Winners are selected at the stored
-   float32 metric precision; a finite tie selects WOA23. Because `std` requires
-   `n >= 2` while `RMSE` requires `n >= 1`, and because the two metrics can select
-   different references, `bias` and count fields may differ between the combined
-   `std` and `RMSE` files.
+6. **Epoch-declustered statistics (`*_std_declustered`, `*_rmse_declustered`, `*_bias_declustered`, `*_std_within`, `*_std_between`).**
+   Assuming an Arctic synoptic/mesoscale eddy decorrelation timescale of ~30 days,
+   observations in each `(100 km cell, depth k)` are grouped into **1-month synoptic
+   epochs** $e = (\text{year}, \text{month}) \in \{1, \dots, M\}$ (`n_epochs`), with
+   epoch count $n_e$, epoch mean $\bar{d}_e$, and within-epoch sum of squared
+   deviations $\text{SSW}_e = \sum_{i=1}^{n_e} (d_{e,i} - \bar{d}_e)^2$. Assigning
+   equal weight $1/M$ to each epoch via the Law of Total Variance yields:
+   * **Epoch-weighted mean offset:** $\mu_{\text{declust}} = \frac{1}{M}\sum_{e=1}^{M} \bar{d}_e$ (`*_bias_declustered`, defined for $M \ge 1$).
+   * **Pooled within-epoch variance (intra-month / sub-grid / instrument):**
+     $\hat{\sigma}^2_{\text{within}} = \frac{\sum_e \text{SSW}_e}{n - M}$ (`*_std_within` $= \sqrt{\hat{\sigma}^2_{\text{within}}}$, defined where $n > M$).
+   * **Between-epoch sample variance and Law of Total Variance restoration:**
+     With $S^2_{\bar{d}} = \frac{1}{M - 1}\sum_{e=1}^{M}(\bar{d}_e - \mu_{\text{declust}})^2$ ($M \ge 2$), the unbiased random-effects between-epoch variance is
+     $\hat{\sigma}^2_{\text{between}} = \max\!\big(S^2_{\bar{d}} - \hat{\sigma}^2_{\text{within}} \frac{1}{M}\sum_{e=1}^{M}\frac{1}{n_e},\, 0\big)$ (`*_std_between`),
+     and the total single-observation de-clustered variance is
+     $\hat{\sigma}^2_{\text{total}} = S^2_{\bar{d}} + \hat{\sigma}^2_{\text{within}}\big(1 - \frac{1}{M}\sum_{e=1}^{M}\frac{1}{n_e}\big)$ (`*_std_declustered` $= \sqrt{\hat{\sigma}^2_{\text{total}}}$, defined for $M \ge 2$).
+   * **De-clustered RMSE:** $\text{RMSE}_{\text{declust}} = \sqrt{\frac{M-1}{M}\hat{\sigma}^2_{\text{total}} + \mu_{\text{declust}}^2}$ for $M \ge 2$ (and $\sqrt{\mu_{\text{declust}}^2 + \text{SSW}_1 / n}$ for $M = 1$).
+7. **Empirical Bayes regularized statistics (`*_std_se`, `*_rmse_se`) and comparison with a single pan-Arctic prior (`*_std_se_pan_arctic`, `*_rmse_se_pan_arctic`).**
+   When a cell is sampled in only $M = 1$ epoch (where between-epoch variance is
+   unobserved) or a small number of epochs ($M = 2\text{–}4$), $\hat{\sigma}^2_{\text{total}}$
+   is either `NaN` or noisy. Empirical Bayes regularization shrinks $\hat{\sigma}^2_{\text{total}}(c, z)$
+   toward a **local $500\text{ km}$ circular moving-window median prior** $\sigma^2_{\text{prior,500km}}(c, z)$
+   computed across neighboring well-sampled cells ($M \ge 5$, within Euclidean distance
+   $\le 500\text{ km}$, i.e. 5 grid cells / 81-cell circular disk on the $100\text{ km}$
+   EASE-Grid 2.0; if fewer than 3 cells within $500\text{ km}$ have $M \ge 5$, it
+   falls back to cells with $M \ge 2$ within $500\text{ km}$ and then to the
+   domain-wide depth-level median), with prior strength $\nu_0 = 5$ epochs:
+   $$\sigma^2_{\text{SE}}(c, z) = \frac{\nu_0\,\sigma^2_{\text{prior,500km}}(c, z) + (M - 1)\,\hat{\sigma}^2_{\text{total}}(c, z)}{\nu_0 + (M - 1)} \quad (M \ge 2), \qquad \sigma^2_{\text{SE}}(c, z) = \max\!\big(\hat{\sigma}^2_{\text{within}}(c, z),\, \sigma^2_{\text{prior,500km}}(c, z)\big) \quad (M = 1)$$
+   with $\text{RMSE}_{\text{SE}} = \sqrt{\sigma^2_{\text{SE}} + \mu_{\text{declust}}^2}$.
+   To illustrate why a local $500\text{ km}$ radius is preferable to a domain-wide
+   prior, each NetCDF file also includes `*_std_se_pan_arctic` and `*_rmse_se_pan_arctic`,
+   which apply the same formula using a single horizontally uniform pan-Arctic
+   depth-level prior $\sigma^2_{\text{prior,pan}}(z) = \operatorname{median}_{c:\, M \ge 5}\big(\hat{\sigma}^2_{\text{total}}(c, z)\big)$.
+8. **Reference-sensitivity envelope.** The combined product takes a NaN-ignoring
+   elementwise maximum of the two reference-based **metrics** (for profile-weighted, `declustered`,
+   and `se` metrics). With one finite reference it uses that reference; with neither,
+   it is NaN. Below 1500 m it equals WOA23. Associated `bias`, `bias_declustered`,
+   `std_within`, `std_between`, `n`, `n_eff`, `n_epochs` and `n_years` follow the
+   winning reference separately for `std` and `RMSE`. Winners are selected at the
+   stored float32 metric precision; a finite tie selects WOA23.
 
 For a single reference and sample set with `n >= 2`, `RMSE² = ((n − 1) / n) · std² + bias²`.
 The combined maximum does not generally satisfy that identity across its separate
@@ -171,25 +224,30 @@ Twelve NetCDF4 products are written to `outputs/expected_spread/`:
 expected_{std,rmse}_from_{woa23,aotd,woa23_and_aotd}_{potential_temperature,salinity}_ease2_100km.nc
 ```
 
-Dimensions: `(depth=102, y=180, x=180)`. Variables: `Theta_std`/`Theta_rmse` (°C)
-or `S_std`/`S_rmse` (practical-salinity difference), the associated `*_bias`,
-`*_n` (raw comparison count), `*_n_eff` (distinct `(cell, UTC day)` count),
-`*_n_years` (distinct calendar years), 2-D `lat`/`lon`, and EPSG:6931 CRS metadata.
+Dimensions: `(depth=102, y=180, x=180)`. Variables:
+* `Theta_std`/`Theta_rmse` or `S_std`/`S_rmse`: profile-weighted metric,
+* `*_std_declustered`/`*_rmse_declustered`: 1-month epoch-declustered metric,
+* `*_std_se`/`*_rmse_se`: Empirical Bayes regularized ($\nu_0 = 5$, 500 km local moving-window prior) metric for state estimation,
+* `*_std_se_pan_arctic`/`*_rmse_se_pan_arctic`: Empirical Bayes regularized variant using a single pan-Arctic depth-level prior (for comparison),
+* `*_std_within` and `*_std_between`: within-epoch (sub-monthly) and between-epoch (synoptic/interannual) standard deviations,
+* `*_bias` and `*_bias_declustered`: profile-weighted and epoch-weighted mean offsets,
+* `*_n` (raw comparison count), `*_n_eff` (distinct `(cell, UTC day)` count), `*_n_epochs` (distinct `(cell, year, month)` 1-month epochs $M$), `*_n_years` (distinct calendar years),
+* 2-D `lat`/`lon`, and EPSG:6931 CRS metadata (`crs`).
 Practical salinity is conventionally labelled psu in reports.
 
 ```python
 import xarray as xr
 
-path = "outputs/expected_spread/expected_rmse_from_woa23_potential_temperature_ease2_100km.nc"
+path = "outputs/expected_spread/expected_std_from_woa23_potential_temperature_ease2_100km.nc"
 with xr.open_dataset(path) as ds:
-    ds.Theta_rmse.sel(depth=100).plot()
+    ds.Theta_std_se.sel(depth=100).plot()
 ```
 
 ## 4. Results and summary conventions
 
 The following compact summary uses **each product's own finite-cell mask** (`n >= 1`
-for RMSE, `n >= 2` for sample std). Cells receive equal weight, irrespective of their
-comparison counts. Numbers are rounded; the
+for profile-weighted RMSE and Empirical Bayes `*_se`, `n >= 2` for profile-weighted `std`, `M >= 2` for `*_std_declustered`). Cells
+receive equal weight, irrespective of their comparison counts. Numbers are rounded; the
 [spread report](reports/expected_spread/expected_spread_report.md)
 and [level-statistics CSV](reports/expected_spread/tables/level_statistics.csv)
 provide fuller results. Product masks differ, so differences between these
@@ -197,12 +255,17 @@ medians are not paired estimates of reference improvement.
 
 | metric | depths (m) | WOA23 | AOTD | combined maximum |
 |---|---|---|---|---|
-| Theta RMSE (°C) | 10 / 100 / 1500 | 0.819 / 0.504 / 0.0740 | 0.765 / 0.442 / 0.0499 | 0.899 / 0.522 / 0.0759 |
-| Theta std (°C) | 10 / 100 / 1500 | 0.709 / 0.462 / 0.0585 | 0.700 / 0.418 / 0.0524 | 0.773 / 0.473 / 0.0607 |
-| S RMSE (psu) | 10 / 100 / 1500 | 0.596 / 0.141 / 0.00880 | 0.463 / 0.109 / 0.00579 | 0.658 / 0.146 / 0.00910 |
-| S std (psu) | 10 / 100 / 1500 | 0.448 / 0.112 / 0.00760 | 0.388 / 0.0988 / 0.00606 | 0.484 / 0.117 / 0.00765 |
-| finite Theta RMSE cells (`n >= 1`) | 10 / 100 / 1500 | 1694 / 1393 / 587 | 1703 / 1390 / 586 | 1707 / 1403 / 591 |
-| finite Theta std cells (`n >= 2`) | 10 / 100 / 1500 | 1608 / 1334 / 524 | 1615 / 1334 / 524 | 1618 / 1340 / 527 |
+| Theta RMSE (profile-weighted, °C) | 10 / 100 / 1500 | 0.819 / 0.504 / 0.0740 | 0.765 / 0.442 / 0.0499 | 0.899 / 0.522 / 0.0759 |
+| Theta std (profile-weighted, `n >= 2`, °C) | 10 / 100 / 1500 | 0.709 / 0.462 / 0.0585 | 0.700 / 0.418 / 0.0524 | 0.773 / 0.473 / 0.0607 |
+| Theta std (epoch-declustered, `M >= 2`, °C) | 10 / 100 / 1500 | 0.824 / 0.502 / 0.0657 | 0.785 / 0.453 / 0.0589 | 0.880 / 0.517 / 0.0680 |
+| Theta std (EB regularized, 500 km prior, °C) | 10 / 100 / 1500 | 0.911 / 0.533 / 0.0625 | 0.869 / 0.470 / 0.0544 | 0.963 / 0.546 / 0.0642 |
+| Theta std (EB regularized, pan-Arctic prior, °C) | 10 / 100 / 1500 | 0.872 / 0.549 / 0.0793 | 0.840 / 0.483 / 0.0677 | 0.931 / 0.558 / 0.0807 |
+| S RMSE (profile-weighted, psu) | 10 / 100 / 1500 | 0.596 / 0.141 / 0.00880 | 0.463 / 0.109 / 0.00579 | 0.658 / 0.146 / 0.00910 |
+| S std (profile-weighted, `n >= 2`, psu) | 10 / 100 / 1500 | 0.448 / 0.112 / 0.00760 | 0.388 / 0.0988 / 0.00606 | 0.484 / 0.117 / 0.00765 |
+| S std (epoch-declustered, `M >= 2`, psu) | 10 / 100 / 1500 | 0.549 / 0.130 / 0.00870 | 0.459 / 0.110 / 0.00676 | 0.586 / 0.133 / 0.00881 |
+| S std (EB regularized, 500 km prior, psu) | 10 / 100 / 1500 | 0.629 / 0.138 / 0.00804 | 0.506 / 0.113 / 0.00637 | 0.672 / 0.142 / 0.00816 |
+| S std (EB regularized, pan-Arctic prior, psu) | 10 / 100 / 1500 | 0.504 / 0.124 / 0.00993 | 0.431 / 0.106 / 0.00777 | 0.541 / 0.127 / 0.0101 |
+| finite Theta cells (`n >= 1` / `n >= 2` / `M >= 2`) | 10 / 100 / 1500 | 1694 (1608/1520) / 1393 (1334/1279) / 587 (524/471) | 1703 (1615/1529) / 1390 (1334/1279) / 586 (524/471) | 1707 (1618/1532) / 1403 (1340/1285) / 591 (527/474) |
 
 The finite-cell medians decrease with depth in this summary, but depth-dependent
 sampling masks and sparse deep cells must be considered. Spatial patterns are
@@ -211,6 +274,10 @@ and [depth profiles](reports/expected_spread/figures/spread_vs_depth.png).
 All spread figures are under [`reports/expected_spread/figures/`](reports/expected_spread/figures/).
 Their spatial percentile ranges describe variation among sampled cells, not
 confidence intervals for a mean or future observation.
+
+**Regional behaviour of Empirical Bayes regularized (`*_se`, 500 km local prior) versus profile-weighted spread and the single pan-Arctic prior (`*_se_pan_arctic`):**
+* **In the Central Arctic (`> 80°N`):** Drifting Ice-Tethered Profilers take dozens of profiles within a single month (`n >> M`; at 10 m north of 80°N, median `n = 51` vs. `M = 5` 1-month epochs). Profile-weighted (`1/n`) pooling is dominated by within-month jitter (`*_std_within`), whereas epoch-declustered (`1/M`) weighting restores multi-epoch variance (`*_std_between`), increasing median Central Arctic 10 m `Theta_std` from `0.044 °C` (profile-weighted) to `0.063 °C` (epoch-declustered) and `S_std` from `0.436 psu` to `0.580 psu`. With a **single pan-Arctic prior** (`0.82 °C` at 10 m), low-`M` near-freezing Central Arctic cells were pulled up to an unphysical `0.690 °C`; with the **500 km moving-window prior**, they are regularized toward neighboring ice-covered basin cells, keeping median 10 m Central Arctic `Theta_std_se` at a realistic **`0.071 °C`** and `S_std_se` at **`0.655 psu`**.
+* **Along the Russian coast (`68–78°N, 60–175°E`):** Intense river-runoff plumes and summer heating produce large local variance (median 10 m profile-weighted `S_std = 1.50 psu`, epoch-declustered `1.73 psu`; profile-weighted `Theta_std = 0.727 °C`, epoch-declustered `0.984 °C`), but sampling is temporally sparse (median `n = 6` across `M = 3` 1-month epochs). A **single pan-Arctic prior** (`~0.55 psu` for 10 m `S`) over-damped the entire Russian shelf down to `1.03 psu`. The **500 km moving-window prior** instead draws its prior from neighboring shelf cells, preserving the shelf regime (`1.73 psu` median 10 m `S_std_se` and `1.30 °C` `Theta_std_se`) while still damping isolated single-cruise extreme spikes (`> 3–4 psu`) toward the 500 km regional shelf median.
 
 ## 5. Interpretation and limitations
 
@@ -238,6 +305,33 @@ confidence intervals for a mean or future observation.
   confidence bounds. Users should apply minimum `n_eff` / `n_years` thresholds,
   spatial regularization across unsampled (`NaN`) cells, and out-of-sample evaluation
   for their application.
+
+### 5.1 Guidance for ocean state estimation: `*_std_se` versus `*_rmse_se`
+
+When weighting in situ profile observations in an ocean state estimate or data
+assimilation cost function $J_{\text{obs}} = \sum_i \big((y_i - \mathcal{H}(\mathbf{x})) / \sigma_i\big)^2$:
+
+* **Use `*_std_se` (`Theta_std_se`, `S_std_se`) as the observation/representation uncertainty $\sigma_i$.**
+  The denominator $\sigma_i$ should represent the zero-mean random variance of a
+  point profile around the local grid-cell state (instrument error + internal waves
+  + unresolved sub-grid/synoptic eddies + interannual variability around the monthly
+  cycle). `*_std_se` removes the systematic mean offset (`*_bias_declustered`)
+  relative to the reference climatology and regularizes sparse cells toward the local
+  500 km prior. By contrast, `*_rmse_se` ($\sqrt{\sigma_{\text{SE}}^2 + \mu_{\text{declust}}^2}$)
+  includes the squared mean bias between the profiles and WOA23/AOTD. Where the
+  reference climatology is over-smoothed across sharp boundary-current fronts (e.g.
+  Fram Strait, Barents Sea) or lags recent Arctic warming and Beaufort Gyre
+  freshening, $\mu_{\text{declust}}$ reflects **climatology error** rather than
+  random observation scatter; using `*_rmse_se` as $\sigma_i$ would needlessly
+  down-weight valid observations in those regions.
+* **When `*_rmse_se` is appropriate:** Use `*_rmse_se` only when assimilating
+  anomalies defined relative to the static climatology without bias correction, or
+  when specifying prior background-state uncertainty $\mathbf{B}$ around a WOA23/AOTD
+  initial condition where both random variability and potential climatological bias
+  must be covered.
+* **Instrument-noise floor at abyssal depths:** In quiescent deep basins ($> 1500\text{ m}$),
+  impose a modest sensor/calibration floor (e.g. $\sigma_\Theta \ge 0.01\text{–}0.02\ ^\circ\text{C}$,
+  $\sigma_S \ge 0.002\text{–}0.005\text{ psu}$) so deep observations are not over-weighted.
 
 ## References
 

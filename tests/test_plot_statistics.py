@@ -36,7 +36,9 @@ def test_main_creates_figure_directory_before_rendering(tmp_path, monkeypatch):
         seen.append(args)
 
     monkeypatch.setattr(plots, "make", render)
-    for name in ("vs_depth", "bias_maps", "product_difference_maps", "counts_vs_depth"):
+    for name in ("vs_depth", "bias_maps", "product_difference_maps", "counts_vs_depth",
+                 "declustered_vs_depth", "declustered_maps", "method_comparison_maps",
+                 "variance_components_maps", "method_distributions_by_depth", "prior_comparison_maps"):
         monkeypatch.setattr(plots, name, render)
     plots.main()
-    assert len(seen) == 11
+    assert len(seen) == 21

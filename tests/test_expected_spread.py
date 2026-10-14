@@ -42,6 +42,30 @@ def test_sample_statistics_and_empty_or_singleton_cells():
     np.testing.assert_array_equal(result["n_years"], [0, 1, 2])
 
 
+def test_1month_epoch_declustering_and_se_shrinkage():
+    # Cell 0: 100 profiles in epoch 1 (all d=+1.0, SSW=0) and 1 profile in epoch 2 (d=-1.0, SSW=0)
+    # Raw pooling weights epoch 1 by 100/101 -> raw std ~ 0.199, raw bias = +99/101
+    # De-clustered pooling weights each epoch by 1/2 -> bias_declustered = 0.0, S^2_dbar = 2.0, std_declustered = sqrt(2)
+    n = np.array([[101.0, 20.0]])
+    s1 = np.array([[99.0, 0.0]])
+    s2 = np.array([[101.0, 20.0]])
+    m_ep = np.array([[2, 10]], dtype="int32")
+    s1_ep = np.array([[0.0, 0.0]])
+    s2_ep = np.array([[2.0, 9.0]])  # Cell 1 has M=10 epochs, S^2_dbar = 9/(9) = 1.0
+    s_inv_ne = np.array([[1.01, 5.0]])
+    s_ssw = np.array([[0.0, 0.0]])
+    res = spread.deviation_statistics(
+        n, s1, s2, n_eff=np.array([[2, 10]]), n_years=np.array([[2, 5]]),
+        m_ep=m_ep, s1_ep=s1_ep, s2_ep=s2_ep, s_inv_ne=s_inv_ne, s_ssw=s_ssw, nu0=5.0,
+    )
+    assert res["bias"][0, 0] == pytest.approx(99.0 / 101.0)
+    assert res["bias_declustered"][0, 0] == pytest.approx(0.0)
+    assert res["std"][0, 0] < 0.25
+    assert res["std_declustered"][0, 0] == pytest.approx(np.sqrt(2.0))
+    # Prior from cell 1 (M=10 >= 5) has var=1.0; cell 0 (M=2) shrinks var=2.0 toward 1.0 with nu0=5: (5*1 + 1*2)/6 = 7/6
+    assert res["std_se"][0, 0] == pytest.approx(np.sqrt(7.0 / 6.0))
+
+
 def test_envelope_selects_each_statistics_own_bias_and_count():
     woa = dict(std=np.array([2, np.nan, 1, np.nan, 1]),
                rmse=np.array([3, np.nan, 2, np.nan, 2]),

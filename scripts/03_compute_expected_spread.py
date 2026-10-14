@@ -11,15 +11,20 @@ References (one product each):
     aotd            published AOTD monthly climatology (0-1500 m, treated as the WOA23 0.25 deg grid, rows 599-719); NaN deeper
     woa23_and_aotd  elementwise fmax of the two metric fields, ignoring NaN (WOA23 alone below 1500 m)
 Per 100 km cell and standard depth level (pooled over 1992-2023, no time dimension, NaN where no observation):
-    rmse    = sqrt(mean(d^2))                                spread about the reference, bias included (NaN when n < 1)
-    std     = sqrt(n / (n - 1) * (mean(d^2) - mean(d)^2))    sample standard deviation about the cell's mean offset (ddof=1; NaN when n < 2)
+    rmse    = sqrt(mean(d^2))                                profile-weighted spread about the reference, bias included (NaN when n < 1)
+    std     = sqrt(n / (n - 1) * (mean(d^2) - mean(d)^2))    profile-weighted sample standard deviation about the cell's mean offset (ddof=1; NaN when n < 2)
     bias    = mean(d), n = number of finite comparisons
     n_eff   = number of distinct (100 km cell, UTC calendar day) sampling days with valid comparisons (de-clustered count proxy)
     n_years = number of distinct calendar years (1992-2023) with valid comparisons
+    n_epochs = M, number of distinct 1-month synoptic epochs (cell, year, month) with valid comparisons
+    std_declustered, rmse_declustered, bias_declustered, std_within, std_between = epoch-declustered (1-month synoptic epoch) statistics
+    std_se, rmse_se = Empirical Bayes regularized (nu_0 = 5 epochs, 500 km local moving-window prior) epoch-declustered spread (defined for all M >= 1)
+    std_se_pan_arctic, rmse_se_pan_arctic = Empirical Bayes regularized variant using a single pan-Arctic depth-level prior (for comparison with the 500 km local prior)
 
 Usage (from the repo root): python scripts/03_compute_expected_spread.py   (about 1.5 min, about 4 GB RAM)
 Outputs (untracked): outputs/expected_spread/expected_{std,rmse}_from_{woa23,aotd,woa23_and_aotd}_{potential_temperature,salinity}_ease2_100km.nc
 """
+import math
 import os
 import numpy as np
 import xarray as xr
@@ -151,7 +156,65 @@ def load_aotd(key, depth):
     return out
 
 
-def deviation_statistics(n, s1, s2, n_eff=None, n_years=None):
+def local_500km_prior(var_tot_dec, M, radius_cells=5):
+    """Compute 500 km circular moving-window median prior on the 2D grid at each depth, plus pan-Arctic scalar prior."""
+    v2d = var_tot_dec.reshape(var_tot_dec.shape[0], -1) if var_tot_dec.ndim > 1 else var_tot_dec[None, :]
+    m2d = M.reshape(v2d.shape)
+    nlev, ncells = v2d.shape
+    pan_prior = np.zeros((nlev, 1), dtype="float64")
+    for k in range(nlev):
+        well = v2d[k][(m2d[k] >= 5) & np.isfinite(v2d[k])]
+        if well.size == 0:
+            well = v2d[k][np.isfinite(v2d[k])]
+        pan_prior[k, 0] = float(np.median(well)) if well.size > 0 else np.nan
+    side = int(math.isqrt(ncells))
+    if side * side != ncells or side <= 2 * radius_cells:
+        out_pan = np.broadcast_to(pan_prior, v2d.shape).copy()
+        return (out_pan[0] if var_tot_dec.ndim == 1 else out_pan), (out_pan[0] if var_tot_dec.ndim == 1 else out_pan)
+
+    offsets = [(dy, dx) for dy in range(-radius_cells, radius_cells + 1)
+               for dx in range(-radius_cells, radius_cells + 1) if dy * dy + dx * dx <= radius_cells * radius_cells]
+    R = radius_cells
+    v_grid = v2d.reshape(nlev, side, side)
+    m_grid = m2d.reshape(nlev, side, side)
+    v_pad = np.pad(v_grid, ((0, 0), (R, R), (R, R)), constant_values=np.nan)
+    m_pad = np.pad(m_grid, ((0, 0), (R, R), (R, R)), constant_values=0)
+
+    stack_v = np.empty((len(offsets), nlev, side, side), dtype="float64")
+    stack_m = np.empty((len(offsets), nlev, side, side), dtype="float64")
+    for idx, (dy, dx) in enumerate(offsets):
+        stack_v[idx] = v_pad[:, R + dy:R + dy + side, R + dx:R + dx + side]
+        stack_m[idx] = m_pad[:, R + dy:R + dy + side, R + dx:R + dx + side]
+
+    has_target = (m_grid >= 1).reshape(nlev, -1)
+    stack_v = stack_v.reshape(len(offsets), nlev, -1)
+    stack_m = stack_m.reshape(len(offsets), nlev, -1)
+    loc_prior = np.broadcast_to(pan_prior, (nlev, ncells)).copy()
+    with np.errstate(invalid="ignore"):
+        for k in range(nlev):
+            t_idx = np.nonzero(has_target[k])[0]
+            if t_idx.size == 0:
+                continue
+            sv = stack_v[:, k, t_idx]
+            sm = stack_m[:, k, t_idx]
+            v5 = np.where((sm >= 5) & np.isfinite(sv), sv, np.nan)
+            c5 = np.isfinite(v5).sum(axis=0)
+            med5 = np.full(t_idx.size, np.nan)
+            if (c5 >= 3).any():
+                med5[c5 >= 3] = np.nanmedian(v5[:, c5 >= 3], axis=0)
+            v2 = np.where((sm >= 2) & np.isfinite(sv), sv, np.nan)
+            c2 = np.isfinite(v2).sum(axis=0)
+            med2 = np.full(t_idx.size, np.nan)
+            if (c2 >= 1).any():
+                med2[c2 >= 1] = np.nanmedian(v2[:, c2 >= 1], axis=0)
+            loc_prior[k, t_idx] = np.where(c5 >= 3, med5, np.where(c2 >= 1, med2, pan_prior[k, 0]))
+    out_pan = np.broadcast_to(pan_prior, (nlev, ncells)).copy()
+    if var_tot_dec.ndim == 1:
+        return loc_prior[0], out_pan[0]
+    return loc_prior, out_pan
+
+
+def deviation_statistics(n, s1, s2, n_eff=None, n_years=None, m_ep=None, s1_ep=None, s2_ep=None, s_inv_ne=None, s_ssw=None, nu0=5.0):
     with np.errstate(invalid="ignore", divide="ignore"):
         mean = s1 / n
         pop_var = np.maximum(s2 / n - mean ** 2, 0.0)
@@ -166,6 +229,55 @@ def deviation_statistics(n, s1, s2, n_eff=None, n_years=None):
             out["n_eff"] = n_eff
         if n_years is not None:
             out["n_years"] = n_years
+        if m_ep is not None:
+            M = m_ep.astype("float64")
+            mu_dec = np.where(M >= 1, s1_ep / M, np.nan)
+            var_within = np.where(n > M, np.maximum(s_ssw / (n - M), 0.0), np.nan)
+            s2_dbar = np.where(M >= 2, np.maximum((s2_ep - M * (mu_dec ** 2)) / (M - 1.0), 0.0), np.nan)
+            var_between = np.where(
+                M >= 2,
+                np.maximum(s2_dbar - np.where(np.isfinite(var_within), var_within * (s_inv_ne / M), 0.0), 0.0),
+                np.nan,
+            )
+            var_tot_dec = np.where(
+                M >= 2,
+                np.maximum(s2_dbar + np.where(np.isfinite(var_within), var_within * (1.0 - s_inv_ne / M), 0.0), 0.0),
+                np.nan,
+            )
+            rmse_dec = np.where(
+                M >= 2,
+                np.sqrt(np.maximum(((M - 1.0) / M) * var_tot_dec + mu_dec ** 2, 0.0)),
+                np.where(M == 1, np.sqrt(np.maximum(mu_dec ** 2 + np.where(n > 1, s_ssw / n, 0.0), 0.0)), np.nan),
+            )
+            # Empirical Bayes shrinkage (nu_0 = 5 epochs) with 500 km local moving-window prior and pan-Arctic scalar prior
+            loc_prior_var, pan_prior_var = local_500km_prior(var_tot_dec, M, radius_cells=5)
+            local_var_m1 = np.where(np.isfinite(var_within), np.maximum(var_within, loc_prior_var), loc_prior_var)
+            var_se = np.where(
+                M >= 2,
+                (nu0 * loc_prior_var + (M - 1.0) * var_tot_dec) / (nu0 + (M - 1.0)),
+                np.where(M == 1, local_var_m1, np.nan),
+            )
+            rmse_se = np.where(M >= 1, np.sqrt(np.maximum(var_se + mu_dec ** 2, 0.0)), np.nan)
+
+            pan_var_m1 = np.where(np.isfinite(var_within), np.maximum(var_within, pan_prior_var), pan_prior_var)
+            var_se_pan = np.where(
+                M >= 2,
+                (nu0 * pan_prior_var + (M - 1.0) * var_tot_dec) / (nu0 + (M - 1.0)),
+                np.where(M == 1, pan_var_m1, np.nan),
+            )
+            rmse_se_pan = np.where(M >= 1, np.sqrt(np.maximum(var_se_pan + mu_dec ** 2, 0.0)), np.nan)
+            out.update(
+                n_epochs=m_ep.astype("int32"),
+                bias_declustered=mu_dec,
+                std_within=np.sqrt(var_within),
+                std_between=np.sqrt(var_between),
+                std_declustered=np.sqrt(var_tot_dec),
+                rmse_declustered=rmse_dec,
+                std_se=np.sqrt(np.maximum(var_se, 0.0)),
+                rmse_se=rmse_se,
+                std_se_pan_arctic=np.sqrt(np.maximum(var_se_pan, 0.0)),
+                rmse_se_pan_arctic=rmse_se_pan,
+            )
         return out
 
 
@@ -178,10 +290,13 @@ def combine_statistics(w, a):
         pick_w = np.isnan(a_stored) | (w_stored >= a_stored)
         out[f"bias_{kind}"] = np.where(pick_w, w["bias"], a["bias"])
         out[f"n_{kind}"] = np.where(pick_w, w["n"], a["n"])
-        if "n_eff" in w and "n_eff" in a:
-            out[f"n_eff_{kind}"] = np.where(pick_w, w["n_eff"], a["n_eff"])
-        if "n_years" in w and "n_years" in a:
-            out[f"n_years_{kind}"] = np.where(pick_w, w["n_years"], a["n_years"])
+        for extra in ("n_eff", "n_years", "n_epochs", "bias_declustered", "std_within", "std_between"):
+            if extra in w and extra in a:
+                out[f"{extra}_{kind}"] = np.where(pick_w, w[extra], a[extra])
+        for prefix in ("declustered", "se", "se_pan_arctic"):
+            mk = f"{kind}_{prefix}"
+            if mk in w and mk in a:
+                out[mk] = np.fmax(w[mk], a[mk])
     return out
 
 
@@ -220,6 +335,11 @@ def main():
             np.zeros((nlev, NC * NC)),
             np.zeros((nlev, NC * NC), dtype="int32"),
             np.zeros((nlev, NC * NC), dtype="uint64"),
+            np.zeros((nlev, NC * NC), dtype="int32"),
+            np.zeros((nlev, NC * NC)),
+            np.zeros((nlev, NC * NC)),
+            np.zeros((nlev, NC * NC)),
+            np.zeros((nlev, NC * NC)),
         ]
         for rn in ("woa23", "aotd")
         for v in ("potential_temperature", "salinity")
@@ -228,9 +348,10 @@ def main():
         sel = np.nonzero((month == m) & inside)[0]
         if len(sel) == 0:
             continue
-        ce, la = cell[sel], lat[sel]
-        yr_bit = np.uint64(1) << np.clip(year[sel] - YEAR0, 0, 62).astype("uint64")
+        ce, la, yr_sel = cell[sel], lat[sel], year[sel] - YEAR0
+        yr_bit = np.uint64(1) << np.clip(yr_sel, 0, 62).astype("uint64")
         cd_key = ce.astype("int64") * 100000 + day_id[sel]
+        ep_key = ce.astype("int64") * 64 + yr_sel.astype("int64")
         r0, r1, wr, c0, c1, wc = r0_all[sel], r1_all[sel], wr_all[sel], c0_all[sel], c1_all[sel], wc_all[sel]
         m0, m1, wm, s0, s1_i, ws = m0_all[sel], m1_all[sel], wm_all[sel], s0_all[sel], s1_all[sel], ws_all[sel]
         t_o, s_o = To[sel].T.astype("float64"), So[sel].T.astype("float64")
@@ -250,25 +371,37 @@ def main():
             devs = {"potential_temperature": calculate_potential_T(t_o, S_for_obs, z, la) - calculate_potential_T(Tr, Sr, z, la),
                     "salinity": s_o - Sr}
             for v, dev in devs.items():
-                n, s1, s2, neff, ymask = acc[(rn, v)]
+                n, s1, s2, neff, ymask, m_ep, s1_ep, s2_ep, s_inv_ne, s_ssw = acc[(rn, v)]
                 good = np.isfinite(dev)
                 for k in range(nlev):
                     g = good[k]
                     if g.any():
                         cg = ce[g]
+                        dg = dev[k, g]
                         n[k] += np.bincount(cg, minlength=NC * NC)
-                        s1[k] += np.bincount(cg, weights=dev[k, g], minlength=NC * NC)
-                        s2[k] += np.bincount(cg, weights=dev[k, g] ** 2, minlength=NC * NC)
+                        s1[k] += np.bincount(cg, weights=dg, minlength=NC * NC)
+                        s2[k] += np.bincount(cg, weights=dg ** 2, minlength=NC * NC)
                         uniq_cd = np.unique(cd_key[g])
                         neff[k] += np.bincount(uniq_cd // 100000, minlength=NC * NC).astype("int32")
                         np.bitwise_or.at(ymask[k], cg, yr_bit[g])
+                        uniq_ep, inv_ep, n_e = np.unique(ep_key[g], return_inverse=True, return_counts=True)
+                        ep_cells = uniq_ep // 64
+                        s1_e = np.bincount(inv_ep, weights=dg)
+                        s2_e = np.bincount(inv_ep, weights=dg ** 2)
+                        dbar_e = s1_e / n_e
+                        ssw_e = np.maximum(s2_e - n_e * (dbar_e ** 2), 0.0)
+                        m_ep[k] += np.bincount(ep_cells, minlength=NC * NC).astype("int32")
+                        s1_ep[k] += np.bincount(ep_cells, weights=dbar_e, minlength=NC * NC)
+                        s2_ep[k] += np.bincount(ep_cells, weights=dbar_e ** 2, minlength=NC * NC)
+                        s_inv_ne[k] += np.bincount(ep_cells, weights=1.0 / n_e, minlength=NC * NC)
+                        s_ssw[k] += np.bincount(ep_cells, weights=ssw_e, minlength=NC * NC)
         print("month", m, "done", flush=True)
 
     shp = (nlev, NC, NC)
-    metrics = {}  # (product, var) -> dict(std, rmse, bias, n, n_eff, n_years)
-    for (rn, v), (n, s1, s2, neff, ymask) in acc.items():
+    metrics = {}
+    for (rn, v), (n, s1, s2, neff, ymask, m_ep, s1_ep, s2_ep, s_inv_ne, s_ssw) in acc.items():
         nyears = np.bitwise_count(ymask).astype("int32")
-        metrics[(rn, v)] = deviation_statistics(n, s1, s2, n_eff=neff, n_years=nyears)
+        metrics[(rn, v)] = deviation_statistics(n, s1, s2, n_eff=neff, n_years=nyears, m_ep=m_ep, s1_ep=s1_ep, s2_ep=s2_ep, s_inv_ne=s_inv_ne, s_ssw=s_ssw)
     for v in ("potential_temperature", "salinity"):
         w, a = metrics[("woa23", v)], metrics[("aotd", v)]
         metrics[("woa23_and_aotd", v)] = combine_statistics(w, a)
@@ -283,23 +416,53 @@ def main():
         unit = "degree_Celsius" if v == "potential_temperature" else "1e-3"
         pname = v.replace("_", " ")
         for kind, desc in (("std", "sample standard deviation (ddof=1) about the cell mean offset"), ("rmse", "RMSE (about the reference, bias included)")):
-            bias = mt[f"bias_{kind}"] if rn == "woa23_and_aotd" else mt["bias"]
-            n = mt[f"n_{kind}"] if rn == "woa23_and_aotd" else mt["n"]
-            n_eff = mt[f"n_eff_{kind}"] if rn == "woa23_and_aotd" else mt["n_eff"]
-            n_years = mt[f"n_years_{kind}"] if rn == "woa23_and_aotd" else mt["n_years"]
+            sfx = f"_{kind}" if rn == "woa23_and_aotd" else ""
+            bias = mt[f"bias{sfx}"]
+            n = mt[f"n{sfx}"]
+            n_eff = mt[f"n_eff{sfx}"]
+            n_years = mt[f"n_years{sfx}"]
+            n_epochs = mt[f"n_epochs{sfx}"]
+            bias_dec = mt[f"bias_declustered{sfx}"]
+            std_w = mt[f"std_within{sfx}"]
+            std_b = mt[f"std_between{sfx}"]
+            val_dec = mt[f"{kind}_declustered"]
+            val_se = mt[f"{kind}_se"]
+            val_se_pan = mt[f"{kind}_se_pan_arctic"]
             ds = xr.Dataset(
                 {
                     f"{short}_{kind}": (("depth", "y", "x"), mt[kind].reshape(shp).astype("float32"),
-                                        dict(long_name=f"expected {desc} of in situ {pname} from {titles[rn]}", units=unit,
+                                        dict(long_name=f"profile-weighted expected {desc} of in situ {pname} from {titles[rn]}", units=unit,
                                              grid_mapping="crs", coordinates="lat lon",
                                              comment="Deviation = obs - reference (bilinearly interpolated in space and linearly in time), both as potential temperature (T only), pooled per cell 1992-2023, no time dimension. "
                                                      f"Product: {rn}. Sample std uses ddof=1 (NaN when n < 2); RMSE is NaN when n < 1; AOTD reference exists only to 1500 m.")),
+                    f"{short}_{kind}_declustered": (("depth", "y", "x"), val_dec.reshape(shp).astype("float32"),
+                                                    dict(long_name=f"epoch-declustered (1-month synoptic epoch) {desc} of in situ {pname} from {titles[rn]}", units=unit,
+                                                         grid_mapping="crs", coordinates="lat lon",
+                                                         comment="Equal weight per (cell, year, month) synoptic epoch plus random-effects within-epoch variance restoration. NaN when n_epochs < 2 for std (n_epochs < 1 for RMSE).")),
+                    f"{short}_{kind}_se": (("depth", "y", "x"), val_se.reshape(shp).astype("float32"),
+                                           dict(long_name=f"Empirical Bayes regularized (500 km local moving-window prior, nu_0=5) {kind} of in situ {pname} from {titles[rn]}", units=unit,
+                                                grid_mapping="crs", coordinates="lat lon",
+                                                comment="Shrinks epoch-declustered variance toward the 500 km circular moving-window median prior across neighboring cells with n_epochs >= 5 (prior strength nu_0 = 5 epochs). Defined for all sampled cells with n_epochs >= 1.")),
+                    f"{short}_{kind}_se_pan_arctic": (("depth", "y", "x"), val_se_pan.reshape(shp).astype("float32"),
+                                                      dict(long_name=f"Empirical Bayes regularized (single pan-Arctic depth-level prior, nu_0=5) {kind} of in situ {pname} from {titles[rn]}", units=unit,
+                                                           grid_mapping="crs", coordinates="lat lon",
+                                                           comment="Shrinks epoch-declustered variance toward the single pan-Arctic depth-level median prior across all cells with n_epochs >= 5 (nu_0 = 5 epochs). Provided for comparison with the 500 km local prior.")),
+                    f"{short}_std_within": (("depth", "y", "x"), std_w.reshape(shp).astype("float32"),
+                                            dict(long_name=f"within-epoch (sub-monthly / sub-grid / instrument) standard deviation of in situ {pname}", units=unit,
+                                                 grid_mapping="crs", coordinates="lat lon")),
+                    f"{short}_std_between": (("depth", "y", "x"), std_b.reshape(shp).astype("float32"),
+                                             dict(long_name=f"between-epoch (synoptic / seasonal-anomaly / interannual) standard deviation of in situ {pname}", units=unit,
+                                                  grid_mapping="crs", coordinates="lat lon")),
                     f"{short}_bias": (("depth", "y", "x"), bias.reshape(shp).astype("float32"),
-                                      dict(long_name=f"mean in situ {pname} minus reference", units=unit, grid_mapping="crs", coordinates="lat lon")),
+                                      dict(long_name=f"profile-weighted mean in situ {pname} minus reference", units=unit, grid_mapping="crs", coordinates="lat lon")),
+                    f"{short}_bias_declustered": (("depth", "y", "x"), bias_dec.reshape(shp).astype("float32"),
+                                                  dict(long_name=f"epoch-weighted (1-month de-clustered) mean in situ {pname} minus reference", units=unit, grid_mapping="crs", coordinates="lat lon")),
                     f"{short}_n": (("depth", "y", "x"), n.reshape(shp).astype("int32"),
                                    dict(long_name="number of finite in situ comparison values used", units="1", grid_mapping="crs", coordinates="lat lon")),
                     f"{short}_n_eff": (("depth", "y", "x"), n_eff.reshape(shp).astype("int32"),
-                                       dict(long_name="number of distinct (cell, UTC day) sampling days with valid comparisons (de-clustered count proxy)", units="1", grid_mapping="crs", coordinates="lat lon")),
+                                       dict(long_name="number of distinct (cell, UTC day) sampling days with valid comparisons", units="1", grid_mapping="crs", coordinates="lat lon")),
+                    f"{short}_n_epochs": (("depth", "y", "x"), n_epochs.reshape(shp).astype("int32"),
+                                          dict(long_name="number of distinct 1-month synoptic epochs (cell, year, month) with valid comparisons", units="1", grid_mapping="crs", coordinates="lat lon")),
                     f"{short}_n_years": (("depth", "y", "x"), n_years.reshape(shp).astype("int32"),
                                          dict(long_name="number of distinct calendar years (1992-2023) with valid comparisons", units="1", grid_mapping="crs", coordinates="lat lon")),
                     "crs": ((), np.int32(0), dict(grid_mapping_name="lambert_azimuthal_equal_area", latitude_of_projection_origin=90.0,
@@ -315,7 +478,10 @@ def main():
                 attrs=dict(title=f"Expected {kind} of in situ {pname} from {titles[rn]} on the EASE2 100 km Arctic grid",
                            Conventions="CF-1.8", history="scripts/03_compute_expected_spread.py"))
             f = f"{OUT}/expected_{kind}_from_{rn}_{v}_ease2_100km.nc"
-            ds.to_netcdf(f, encoding={k: dict(zlib=True, complevel=4) for k in (f"{short}_{kind}", f"{short}_bias", f"{short}_n", f"{short}_n_eff", f"{short}_n_years")})
+            comp_vars = (f"{short}_{kind}", f"{short}_{kind}_declustered", f"{short}_{kind}_se", f"{short}_{kind}_se_pan_arctic",
+                         f"{short}_std_within", f"{short}_std_between", f"{short}_bias", f"{short}_bias_declustered",
+                         f"{short}_n", f"{short}_n_eff", f"{short}_n_epochs", f"{short}_n_years")
+            ds.to_netcdf(f, encoding={k: dict(zlib=True, complevel=4) for k in comp_vars})
             print("wrote", f, flush=True)
 
 
