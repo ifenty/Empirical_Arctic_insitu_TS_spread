@@ -1,6 +1,6 @@
 """Download all input data needed by the pipeline into data/ (untracked).
 
-  data/scatter/AOTD{1983..2023}.nc      AOTD scattered profiles, figshare doi:10.6084/m9.figshare.28825490 (Li et al., CC BY 4.0), ~30 MB
+  data/scatter/AOTD{1983..2023}.nc      AOTD scattered profiles, figshare doi:10.6084/m9.figshare.28825490 (Li et al., CC BY 4.0), ~90 MB
   data/climatology/climatology_{01..12}.nc  AOTD gridded monthly climatology, figshare doi:10.6084/m9.figshare.27645738 (CC BY 4.0), ~2 GB
   data/woa23_raw/woa23_decav91C0_{t,s}{01..16}_04.nc  WOA23 1991-2020 0.25 deg T and S: 12 monthly + 4 seasonal files, ~18 GB, NOAA NCEI
 
