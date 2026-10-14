@@ -9,5 +9,5 @@ PY=${PYTHON:-python}
 $PY scripts/01_download_data.py # a) download all required data
 $PY scripts/02_prepare_scatter.py        #    cache the scattered profiles as one npz
 $PY scripts/03_compute_expected_spread.py  # b) compute the expected std / RMSE datasets -> outputs/expected_spread/*.nc
-$PY scripts/04_make_plots.py             # c) overview figures -> reports/expected_spread/*.png
+$PY scripts/04_make_plots.py             # c) overview figures -> reports/expected_spread/figures/*.png
 $PY scripts/05_make_report.py           #    report with tables and figures -> reports/expected_spread/expected_spread_report.md
