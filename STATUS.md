@@ -1,5 +1,10 @@
 # Status log (newest first)
 
+## 2026-10-13 11:10
+- Faithful-port reproduction finished for levels 1-56 (2 workers, 1 h 21 min). Stats: `reports/reproduction/level_stats.csv` (level 1 missing: computed by a test run, rerun `work(1)` to add). Neighbour-search chunk reduced to 1000 to fix a memory blow-up that crashed the VM.
+- Monthly T RMSE vs published: median 0.28 C over levels, max 0.94 C at level 2; correlation >= 0.94. S: median 0.20, max 1.17 at level 2. Valid-cell counts match exactly for T; S differs by a few cells at 33 levels.
+- Next: residual investigation, QC port. New requirements (uncertainty, NaN where unsupported, full WOA vertical grid) are in `HANDOFF.md`.
+
 ## 2026-10-13 09:05
 - Scatter report done: `reports/scatter/scatter_report.md` (20 figures, 45 tables). Note: in the LOCI land mask 255=ocean, 0=land.
 - Faithful port: valid-cell counts match published exactly; monthly T RMSE vs published 0.6 C (50 m), 0.4 C (100 m), 0.13 C (700 m). Investigating residual (data/QC version).
