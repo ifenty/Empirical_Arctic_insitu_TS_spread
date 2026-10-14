@@ -1,13 +1,21 @@
 #!/usr/bin/env bash
-# Run the whole pipeline from a fresh checkout: download data, compute the expected spread datasets, make the figures.
-# Needs about 20 GB of disk for data/ and about 4 GB of RAM. Usage: ./run_all.sh
+# Run the whole pipeline from a fresh checkout: download data, compute the expected-spread datasets, make figures and reports.
+# Needs about 20 GB of disk for data/ and about 4 GB of RAM. Usage: [PYTHON=.venv/bin/python] ./run_all.sh
 set -euo pipefail
 cd "$(dirname "$0")"
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 PY=${PYTHON:-python}
 
-$PY scripts/01_download_data.py # download all required data
-$PY scripts/02_prepare_scatter.py        #    cache the scattered profiles as one npz
-$PY scripts/03_compute_expected_spread.py  # compute the expected std / RMSE datasets -> outputs/expected_spread/*.nc
-$PY scripts/04_make_plots.py             # overview figures -> reports/expected_spread/figures/*.png
-$PY scripts/05_make_report.py           #    report with tables and figures -> reports/expected_spread/expected_spread_report.md
+$PY scripts/01_download_data.py            # download scatter, AOTD climatology, WOA23 -> data/
+$PY scripts/02_prepare_scatter.py          # cache the scattered profiles -> data/scatter_all.npz
+$PY scripts/03_compute_expected_spread.py  # expected std / RMSE / bias / n -> outputs/expected_spread/*.nc
+$PY scripts/04_make_plots.py               # figures -> reports/expected_spread/figures/
+$PY scripts/05_make_report.py              # report + tables -> reports/expected_spread/
+$PY scripts/06_compare_aotd_woa23.py       # AOTD vs WOA23 diagnostic -> reports/woa_compare/
+
+# Scatter-data report: needs the NSIDC EASE2 25 km files (Earthdata login), which cannot be downloaded automatically.
+if [ -d data/ease2 ]; then
+    $PY scripts/07_scatter_data_report.py  # -> reports/scatter/
+else
+    echo "Skipping scripts/07_scatter_data_report.py: data/ease2 not found (see README)."
+fi

@@ -35,7 +35,7 @@ Automated agents: no shell state persists between commands, so prefix commands w
 
 ### 2. Run
 ```bash
-./run_all.sh            # runs scripts 01-05 below (download takes the longest); uses $PYTHON, default `python`
+./run_all.sh            # runs scripts 01-06 (and 07 if data/ease2 exists); the download takes the longest; uses $PYTHON, default `python`
 ```
 
 Or step by step (always from the repo root):
@@ -48,7 +48,7 @@ Or step by step (always from the repo root):
 | 04 | `python scripts/04_make_plots.py` | maps at 10/100/1500 m, log10 profile counts, median spread and counts vs depth, for each statistic and product | `reports/expected_spread/figures/*.png` (11 files) |
 | 05 | `python scripts/05_make_report.py` | writes the report with tables and captions | `reports/expected_spread/expected_spread_report.md` |
 
-Optional diagnostics (not needed for the products):
+Diagnostics (not needed for the products; 06 is run by `run_all.sh`, 07 only if `data/ease2/` exists):
 * `python scripts/06_compare_aotd_woa23.py` compares the published AOTD climatology with WOA23 (-> `reports/woa_compare/`).
 * `python scripts/07_scatter_data_report.py` describes the scattered data, including heuristically inferred platform classes (-> `reports/scatter/`). It also needs the NSIDC EASE-Grid 2.0 N 25 km ancillary files in `data/ease2/` (NSIDC-0772 lat/lon and NSIDC-0609 LOCI land mask; these require a free NASA Earthdata login, so they are not downloaded automatically).
 
