@@ -1,1 +1,0 @@
-This is a series of codes used in the article "An Arctic Ocean Thermohaline Dataset" submitted to Scientific Data, which includes quality control for scatter observations and methods for creating gridded climatology

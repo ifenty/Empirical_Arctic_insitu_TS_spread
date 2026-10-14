@@ -1,6 +1,6 @@
 # AOTD scattered (profile) data: descriptive report
 
-*Generated 2026-10-13 by `scripts/scatter_report.py`. All numbers are computed from `data/scatter_all.npz` (the normalised cache of the yearly files; NaN = missing for T, S, pressure and density).*
+*Generated 2026-10-13 by `scripts/06_scatter_data_report.py`. All numbers are computed from `data/scatter_all.npz` (the normalised cache of the yearly files; NaN = missing for T, S, pressure and density).*
 
 ## Executive summary
 
@@ -315,7 +315,7 @@ The Nordic-seas subset (Fram Strait/Greenland Sea + Iceland Sea + Norwegian Sea)
 
 ## 6. Sampling patterns and INFERRED provenance
 
-> **Everything in this section is INFERRED, not ground truth.** The published files carry no source identifier. The upstream processing (`upstream_matlab/duplicate.m`) numbered the sources 1 ITP, 2 Argo, 3 BOL (Bolin Centre), 4 NABOS, 5 CNarc (Xuelong/Xuelong-2), 6 WOD18, 7 CMEMS, but those IDs were dropped. The classes below are produced by a transparent heuristic.
+> **Everything in this section is INFERRED, not ground truth.** The published files carry no source identifier. The upstream processing (the upstream `duplicate.m`) numbered the sources 1 ITP, 2 Argo, 3 BOL (Bolin Centre), 4 NABOS, 5 CNarc (Xuelong/Xuelong-2), 6 WOD18, 7 CMEMS, but those IDs were dropped. The classes below are produced by a transparent heuristic.
 
 ### 6.1 Method
 
@@ -407,7 +407,7 @@ The published deduplication (`duplicate.m`) removed a profile of sources 2-7 onl
 | criterion | pairs | profiles involved | % of all profiles involved |
 |---|---|---|---|
 | pairs within 5 h (all, input to the tests) | 4,749,590 | 412,270 | 99.5 |
-| pairs |dlat|<0.1, |dlon|<0.1, dt<6 h  (criterion as coded in upstream_matlab/duplicate.m) | 437,714 | 177,584 | 42.9 |
+| pairs |dlat|<0.1, |dlon|<0.1, dt<6 h  (criterion as coded in upstream duplicate.m) | 437,714 | 177,584 | 42.9 |
 | pairs |dlat|<0.1, |dlon|<0.1, dt<=5 h  (criterion as stated in the manuscript) | 393,453 | 169,467 | 40.9 |
 |   same but with dateline-aware dlon | 437,718 | 177,588 | 42.9 |
 | pairs within 1 km (haversine) and 1 h | 62,271 | 65,840 | 15.9 |

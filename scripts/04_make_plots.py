@@ -1,6 +1,6 @@
 """Overview figures of the expected-std and expected-RMSE datasets (potential temperature and salinity): metric maps, log10 profile-count
 maps, and median metric / counts vs depth. One figure per metric (std, rmse) and product (from_woa23, from_aotd, from_woa23_and_aotd).
-Usage: PYTHONPATH=. python scripts/expected_std_overview.py
+Usage (from the repo root): python scripts/04_make_plots.py
 """
 import warnings
 import numpy as np

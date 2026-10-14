@@ -5,7 +5,7 @@ The published grid is labelled 60.0..90.0 N / -180..179.75 E, but it is taken to
 integer row/column shift). So the comparison is cell for cell, no regridding. WOA23 is 1991-2020, AOTD is 1983-2023.
 
 Outputs: outputs/woa/woa_on_aotd_grid.npy (untracked), reports/woa_compare/{level_stats.csv, *.png, maps/*.png}
-Usage: PYTHONPATH=. python scripts/woa_compare.py
+Usage (from the repo root): python scripts/05_compare_aotd_woa23.py
 """
 import os, sys
 import numpy as np
@@ -15,8 +15,17 @@ import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs, cartopy.feature as cf
 
-sys.path.insert(0, os.path.dirname(__file__))
-from reproduce import published
+
+
+def published():
+    """(12, 2, 57, 121, 1440) float32 published AOTD monthly T,S."""
+    arr = np.full((12, 2, 57, 121, 1440), np.nan, dtype="float32")
+    for m in range(12):
+        with xr.open_dataset(f"data/climatology/climatology_{m + 1:02d}.nc") as ds:
+            arr[m, 0] = ds["temp"].values
+            arr[m, 1] = ds["salt"].values
+    return arr
+
 
 RAW, OUT, REP = "data/woa23_raw", "outputs/woa", "reports/woa_compare"
 for d in (OUT, REP, f"{REP}/maps"):

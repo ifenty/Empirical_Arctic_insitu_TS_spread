@@ -16,7 +16,7 @@ def days_to_datetime64(days: np.ndarray) -> np.ndarray:
 
 def normalize_missing_values(d: dict) -> dict:
     """In the published files only `temp` marks missing data with NaN; `salt` and `pres` use exactly 0.0 and `dens`
-    holds arbitrary numbers (1003-1025) at missing levels (BUG-29). Make NaN the universal marker, in place."""
+    holds arbitrary numbers (1003-1025) at missing levels. Make NaN the universal marker, in place."""
     valid = ~np.isnan(d["temp"])
     d["salt"] = np.where(valid & (d["salt"] != 0), d["salt"], np.nan).astype(d["salt"].dtype)
     d["pres"] = np.where(valid, d["pres"], np.nan).astype(d["pres"].dtype)

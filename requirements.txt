@@ -1,0 +1,10 @@
+numpy
+scipy
+pandas
+xarray
+netCDF4
+pyproj
+matplotlib
+cartopy
+gsw      # only used by the unit test (cross-check of the potential temperature code)
+pytest   # only for tests/

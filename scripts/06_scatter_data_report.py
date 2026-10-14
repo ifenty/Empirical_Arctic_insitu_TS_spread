@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Descriptive report of the AOTD scattered (profile) data.
 
-Run from anywhere:  .venv/bin/python scripts/scatter_report.py
+Run from the repo root:  python scripts/06_scatter_data_report.py   (optional diagnostic; needs the NSIDC EASE2 25 km ancillary files in data/ease2, see README)
 Writes ONLY to reports/scatter/ (md report, figures/*.png, tables/*.csv).
 Every number in the markdown is computed here; provenance classes are INFERRED heuristics.
 """
@@ -1263,7 +1263,7 @@ ident_pair = (hashT[pa_] == hashT[pb_]) & (nlevT[pa_] >= 1)
 # S identical as well?
 rows = [
     ["pairs within 5 h (all, input to the tests)", int((dts <= 18000).sum()), nprof(dts <= 18000)],
-    ["pairs |dlat|<0.1, |dlon|<0.1, dt<6 h  (criterion as coded in upstream_matlab/duplicate.m)", int(up6.sum()), nprof(up6)],
+    ["pairs |dlat|<0.1, |dlon|<0.1, dt<6 h  (criterion as coded in upstream duplicate.m)", int(up6.sum()), nprof(up6)],
     ["pairs |dlat|<0.1, |dlon|<0.1, dt<=5 h  (criterion as stated in the manuscript)", int(up5.sum()), nprof(up5)],
     ["  same but with dateline-aware dlon", int(up6w.sum()), nprof(up6w)],
     ["pairs within 1 km (haversine) and 1 h", int(p1km1h.sum()), nprof(p1km1h)],
@@ -1334,7 +1334,7 @@ LIM = ("**Limitations (read before using the classes).** (1) The files contain n
        "labels were available, hence no precision/recall can be computed. Confidence is a heuristic score in [0,1], not a probability.")
 add(6, "## 6. Sampling patterns and INFERRED provenance\n",
     "> **Everything in this section is INFERRED, not ground truth.** The published files carry no source identifier. The upstream "
-    "processing (`upstream_matlab/duplicate.m`) numbered the sources 1 ITP, 2 Argo, 3 BOL (Bolin Centre), 4 NABOS, 5 CNarc "
+    "processing (the upstream `duplicate.m`) numbered the sources 1 ITP, 2 Argo, 3 BOL (Bolin Centre), 4 NABOS, 5 CNarc "
     "(Xuelong/Xuelong-2), 6 WOD18, 7 CMEMS, but those IDs were dropped. The classes below are produced by a transparent heuristic.\n",
     "### 6.1 Method\n",
     f"1. **Track linking.** Profiles are sorted by time; for every profile, candidate successors within {TMAX:.0f} d are searched "
@@ -1730,7 +1730,7 @@ EXEC = [
 ]
 HEAD = [
     "# AOTD scattered (profile) data: descriptive report\n",
-    f"*Generated {GEN_DATE} by `scripts/scatter_report.py`. All numbers are computed from `data/scatter_all.npz` "
+    f"*Generated {GEN_DATE} by `scripts/06_scatter_data_report.py`. All numbers are computed from `data/scatter_all.npz` "
     "(the normalised cache of the yearly files; NaN = missing for T, S, pressure and density).*\n",
     "## Executive summary\n", "\n".join(EXEC) + "\n",
     "## Data notes and conventions\n",

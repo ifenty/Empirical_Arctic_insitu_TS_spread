@@ -2,7 +2,7 @@
 
 For every in situ profile value (scatter data, 1992 onwards) the deviation d = obs - reference is formed at the profile's location
 (nearest WOA23 0.25 deg cell). Both the observation and the reference are converted to potential temperature (UNESCO 1983, surface
-reference, scripts/calc_potential_T.py) BEFORE differencing: d_theta = theta(T_obs, S_obs) - theta(T_ref, S_ref). WOA23 t_an, the scatter
+reference, aotd/potential_temperature.py) BEFORE differencing: d_theta = theta(T_obs, S_obs) - theta(T_ref, S_ref). WOA23 t_an, the scatter
 T and the published AOTD T are all treated as in situ. Where S_obs is missing but T_obs is valid, S_ref is used transiently for theta(T_obs).
 References (one product each):
     woa23           WOA23 decav91C0 monthly (0-1500 m) or seasonal (deeper) field of the profile month/season
@@ -13,7 +13,7 @@ Per 100 km cell and standard depth level (pooled over 1992-2023, no time dimensi
     std  = sqrt(mean(d^2) - mean(d)^2)     spread about the cell's mean offset (population std; 0 when n=1)
     bias = mean(d), n = number of values
 
-Usage: PYTHONPATH=. python scripts/expected_std.py
+Usage (from the repo root): python scripts/03_compute_expected_spread.py   (about 1.5 min, about 4 GB RAM)
 Outputs (untracked): outputs/expected_std/expected_{std,rmse}_from_{woa23,aotd,woa23_and_aotd}_{potential_temperature,salinity}_ease2_100km.nc
 """
 import os
@@ -22,8 +22,8 @@ import sys
 import xarray as xr
 from pyproj import Transformer
 
-sys.path.insert(0, os.path.dirname(__file__))
-from calc_potential_T import calculate_potential_T
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from aotd.potential_temperature import calculate_potential_T
 
 RAW = "data/woa23_raw"
 OUT = "outputs/expected_std"
@@ -167,7 +167,7 @@ def main():
                             y=("y", yc, dict(standard_name="projection_y_coordinate", units="m", axis="Y")),
                             x=("x", xc, dict(standard_name="projection_x_coordinate", units="m", axis="X"))),
                 attrs=dict(title=f"Expected {kind} of in situ {pname} from {titles[rn]} on the EASE2 100 km Arctic grid",
-                           Conventions="CF-1.8", history="scripts/expected_std.py"))
+                           Conventions="CF-1.8", history="scripts/03_compute_expected_spread.py"))
             f = f"{OUT}/expected_{kind}_from_{rn}_{v}_ease2_100km.nc"
             ds.to_netcdf(f, encoding={k: dict(zlib=True, complevel=4) for k in (f"{short}_{kind}", f"{short}_bias", f"{short}_n")})
             print("wrote", f, flush=True)
