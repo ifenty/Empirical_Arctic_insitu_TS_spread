@@ -2,7 +2,7 @@
 
 **Goal:** estimate how much individual in situ profile values of potential temperature and salinity are expected to scatter around reference monthly climatologies (WOA23 and the published AOTD climatology) in the Arctic Ocean, as a function of location (EASE-Grid 2.0 North, 100 km) and depth (the 102 WOA standard levels). The estimates are data-honest (NaN where there is no observation), are provided as expected **RMSE** and expected **standard deviation**, and are computed against three references: WOA23, the published AOTD climatology, and the larger of the two.
 
-The method, data, provenance and limitations are described in **[`docs/technical_note.md`](docs/technical_note.md)**.
+The method, data, provenance and limitations are described in **[`technical_note.md`](technical_note.md)**.
 
 ## Data and credit
 The scattered profiles are the AOTD *scatter* dataset provided by the authors of the Arctic Ocean Thermohaline Dataset:
@@ -65,7 +65,7 @@ Tests: `pytest tests`.
 ## Layout
 - `scripts/01..07_*.py` pipeline and diagnostics (above); `run_all.sh`
 - `scripts/scatter_io.py` (loading the scatter files) and `scripts/potential_temperature.py` (UNESCO 1983 potential temperature): helper modules imported by the scripts
-- `docs/technical_note.md` technical note; `reports/` figures and reports; `tests/`
+- `technical_note.md` technical note; `reports/` figures and reports; `tests/`
 - `data/` (incl. `data/aotd_climatology/`, `data/woa23_raw/`, `data/scatter/`) and `outputs/` are generated and untracked
 
 ## History
