@@ -1,6 +1,6 @@
 criterion,pairs,profiles involved,% of all profiles involved
 "pairs within 5 h (all, input to the tests)",4749590,412270,99.52899539134906
-"pairs |dlat|<0.1, |dlon|<0.1, dt<6 h  (criterion as coded in upstream_matlab/duplicate.m)",437714,177584,42.8718003191533
+"pairs |dlat|<0.1, |dlon|<0.1, dt<6 h  (criterion as coded in upstream duplicate.m)",437714,177584,42.8718003191533
 "pairs |dlat|<0.1, |dlon|<0.1, dt<=5 h  (criterion as stated in the manuscript)",393453,169467,40.91221835686747
   same but with dateline-aware dlon,437718,177588,42.872765987238694
 pairs within 1 km (haversine) and 1 h,62271,65840,15.894896685585714

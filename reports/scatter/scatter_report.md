@@ -1,6 +1,6 @@
 # AOTD scattered (profile) data: descriptive report
 
-*Generated 2026-10-13 by `scripts/07_scatter_data_report.py`. All numbers are computed from `data/scatter_all.npz` (the normalised cache of the yearly files; NaN = missing for T, S, pressure and density).*
+*Generated 2026-10-14 by `scripts/07_scatter_data_report.py`. All numbers are computed from `data/scatter_all.npz` (the normalised cache of the yearly files; NaN = missing for T, S, pressure and density).*
 
 ## Executive summary
 
