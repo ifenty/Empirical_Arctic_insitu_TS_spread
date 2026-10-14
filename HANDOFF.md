@@ -101,3 +101,9 @@ User decision: stop developing our own climatology for now. OI prototype (`aotd/
 (1992+, EASE2 100 km, 102 levels). `from_aotd` uses the published monthly AOTD (0-1500 m, treated as WOA23 grid, rows 599-719) as reference, so it is NaN
 below 1500 m; `from_woa23_and_aotd` = fmax(woa23, aotd) ignoring NaN (WOA23 alone below 1500 m; bias/n from the larger-std product). Median std at 10 m:
 T 0.84/0.76/0.92 C, S 0.60/0.43/0.64 (woa23/aotd/max).
+
+## Expected std/RMSE now in potential temperature (supersedes the in situ T products above)
+`scripts/expected_std.py` now converts obs AND reference to potential temperature (`scripts/calc_potential_T.py`, UNESCO 1983, checked vs gsw to ~1e-3 degC) before
+differencing, and writes expected **std** (about cell mean offset) and expected **RMSE** (about reference, bias included; this equals what was previously
+labelled "std") for Theta and S, each for from_woa23 / from_aotd / from_woa23_and_aotd (fmax): `outputs/expected_std/expected_{std,rmse}_from_*_{potential_temperature,salinity}_ease2_100km.nc`.
+Figures: `reports/expected_std/expected_{std,rmse}_overview_from_*.png` (`scripts/expected_std_overview.py`). Theta vs in situ T std differ by <~0.01 degC at depth.
