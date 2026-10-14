@@ -19,18 +19,18 @@ Requirements: Python >= 3.10, about 20 GB free disk (WOA23 files are large), abo
 git clone https://github.com/ifenty/AOTD_v2.git && cd AOTD_v2
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-./run_all.sh            # runs the four steps below (download takes the longest)
+./run_all.sh            # runs scripts 01-05 below (download takes the longest)
 ```
 
 Or step by step (always from the repo root):
 
-| step | command | what it does | output |
+| script | command | what it does | output |
 |---|---|---|---|
-| a | `python scripts/01_download_data.py` | downloads AOTD scatter + climatology (figshare) and WOA23 monthly/seasonal T, S (NCEI); resumable | `data/` |
-| a | `python scripts/02_prepare_scatter.py` | concatenates yearly scatter files, normalises missing values | `data/scatter_all.npz` |
-| b | `python scripts/03_compute_expected_spread.py` | deviations from the references in potential temperature and salinity, per-cell std/RMSE/bias/n, 3 products (about 1.5 min) | `outputs/expected_spread/*.nc` (12 files) |
-| c | `python scripts/04_make_plots.py` | maps at 10/100/1500 m, log10 profile counts, median spread and counts vs depth, for each statistic and product | `reports/expected_spread/figures/*.png` (11 files) |
-| c2 | `python scripts/05_make_report.py` | writes the report with tables and captions | `reports/expected_spread/expected_spread_report.md` |
+| 01 | `python scripts/01_download_data.py` | downloads AOTD scatter + climatology (figshare) and WOA23 monthly/seasonal T, S (NCEI); resumable | `data/` |
+| 02 | `python scripts/02_prepare_scatter.py` | concatenates yearly scatter files, normalises missing values | `data/scatter_all.npz` |
+| 03 | `python scripts/03_compute_expected_spread.py` | deviations from the references in potential temperature and salinity, per-cell std/RMSE/bias/n, 3 products (about 1.5 min) | `outputs/expected_spread/*.nc` (12 files) |
+| 04 | `python scripts/04_make_plots.py` | maps at 10/100/1500 m, log10 profile counts, median spread and counts vs depth, for each statistic and product | `reports/expected_spread/figures/*.png` (11 files) |
+| 05 | `python scripts/05_make_report.py` | writes the report with tables and captions | `reports/expected_spread/expected_spread_report.md` |
 
 Optional diagnostics (not needed for the products):
 * `python scripts/06_compare_aotd_woa23.py` compares the published AOTD climatology with WOA23 (-> `reports/woa_compare/`).
