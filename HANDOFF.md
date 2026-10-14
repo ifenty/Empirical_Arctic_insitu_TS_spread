@@ -55,3 +55,9 @@ Conclusion: unexplained from released code and data. Ask the author for the code
 
 ## Temporal treatment (open design item)
 Upstream mapping has no temporal decorrelation: weights are purely spatial; `Lt = 1000` is defined in all three scripts but never used (BUG-26). All years 1983-2023 are pooled equally. The new product should handle time explicitly (time-dependent weights and/or trend removal before mapping), and the uncertainty should include interannual variability. Decision pending with the user (trend removal vs weighting).
+
+## Wedge/block patterns in the port (2026-10-13)
+- No cap on profile count in the upstream code. Jan 1500 m S: max 2065 obs nodes within the 555 km Barnes radius; 57.5% of valid cells have 0 nodes in range (keep the seasonal first guess), 7% have 1-3.
+- The wedges/blocks are the circular footprints of the hard radius cutoff (see `reports/reproduction/maps/count_vs_wedges_S_Jan_1500m.png`). Published Jan field is smooth there.
+- Removing the BUG-19 `+1` damping at 1500 m raises Jan S RMSE vs published from 0.0057 to 0.64 psu, so released damping is what matches the published field (`maps/damping_test_S_Jan_1500m.png`).
+- New product design: smooth taper/weights, minimum observation count and maximum distance, NaN beyond them (data-honest), no hard-radius jumps.
