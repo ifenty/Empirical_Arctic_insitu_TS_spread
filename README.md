@@ -1,6 +1,6 @@
 # Expected spread of Arctic in situ temperature and salinity
 
-**Goal:** estimate how much individual in situ profile values of potential temperature and salinity are expected to scatter around the WOA23 climatology in the Arctic Ocean, as a function of location (EASE-Grid 2.0 North, 100 km) and depth (the 102 WOA standard levels). The estimates are data-honest (NaN where there is no observation), are provided as expected **RMSE** and expected **standard deviation**, and are computed against three references: WOA23, the published AOTD climatology, and the larger of the two.
+**Goal:** estimate how much individual in situ profile values of potential temperature and salinity are expected to scatter around reference monthly climatologies (WOA23 and the published AOTD climatology) in the Arctic Ocean, as a function of location (EASE-Grid 2.0 North, 100 km) and depth (the 102 WOA standard levels). The estimates are data-honest (NaN where there is no observation), are provided as expected **RMSE** and expected **standard deviation**, and are computed against three references: WOA23, the published AOTD climatology, and the larger of the two.
 
 The method, data, provenance and limitations are described in **[`docs/technical_note.md`](docs/technical_note.md)**.
 

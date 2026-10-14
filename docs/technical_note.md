@@ -4,12 +4,12 @@
 
 ## 1. Purpose and philosophy
 
-Ocean models and state estimates that assimilate in situ profiles need to know how far a single observation is expected to differ from the model's (or a climatology's) mean state, so that observations can be weighted sensibly. This note describes a **data-driven estimate of that spread for the Arctic Ocean**: for each location and depth, how much do individual in situ profile values scatter around the World Ocean Atlas 2023 (WOA23) climatology?
+Ocean models and state estimates that assimilate in situ profiles need to know how far a single observation is expected to differ from the model's (or a climatology's) mean state, so that observations can be weighted sensibly. This note describes a **data-driven estimate of that spread for the Arctic Ocean**: for each location and depth, how much do individual in situ profile values scatter around a reference (monthly) climatology? Two reference climatologies are used: the World Ocean Atlas 2023 (WOA23) and the published AOTD climatology, and a third estimate combines them.
 
 Design principles:
 
 1. **Data-honest.** The estimate is built only from observations. Where a cell has no observation at a given depth the value is **NaN**; nothing is extrapolated, smoothed in from neighbours, or filled from a background field.
-2. **A fixed, independent reference.** The spread is measured about WOA23 (1991-2020 climatology, monthly to 1500 m and seasonal below), not about a field we constructed from the same observations. A second estimate uses the published AOTD climatology as the reference, and a third takes the larger of the two (a conservative envelope).
+2. **Fixed, published reference climatologies.** The spread is measured about an existing climatology rather than a field we constructed from the same observations. The first estimate uses WOA23 (1991-2020, monthly to 1500 m and seasonal below), the second the published AOTD monthly climatology (0-1500 m), and the third takes the larger of the two (a conservative envelope). The method itself is reference-agnostic: any monthly climatology on the same grid can be substituted.
 3. **Standard grids.** Output is on the WOA standard depth levels (102 levels, 0-5500 m) and the 100 km EASE-Grid 2.0 North grid (EPSG:6931), a regular equal-area grid suited to Arctic modelling. There is no time dimension: the estimate pools all years and seasons, but each observation is compared with the climatology of its own month (or season at depth).
 4. **Potential temperature.** Model temperature state variables are potential temperature, so the deviations are formed in potential temperature, not in situ temperature.
 5. **Two complementary measures** are given: the *expected RMSE* (spread about the reference, including any systematic offset) and the *expected standard deviation* (spread about the cell's own mean offset, i.e. with the bias removed).
