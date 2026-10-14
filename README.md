@@ -44,7 +44,7 @@ Tests: `pytest tests`.
 - `scripts/01..06_*.py` pipeline and diagnostics (above); `run_all.sh`
 - `aotd/` helper package: `io.py` (loading the scatter files), `potential_temperature.py` (UNESCO 1983 potential temperature)
 - `docs/technical_note.md` technical note; `reports/` figures and reports; `tests/`
-- `data/`, `outputs/` are generated and untracked
+- `data/` (incl. `data/aotd_climatology/`, `data/woa23_raw/`, `data/scatter/`) and `outputs/` are generated and untracked
 
 ## History
 This repository began as an attempt to reproduce the AOTD climatology from the authors' released MATLAB code. That code proved incomplete (only two of twelve published monthly files could be reproduced) and a replacement optimal-interpolation climatology did not improve on WOA23, so the project was refocused on the in situ spread. The reproduction and OI code was removed; it is available in the git history before the commit "Refocus repository on in situ spread estimation".

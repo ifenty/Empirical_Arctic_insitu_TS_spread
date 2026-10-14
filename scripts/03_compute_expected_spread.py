@@ -60,7 +60,7 @@ def load_aotd(key):
     """published AOTD monthly field (12, 57, NROW, 1440) float32."""
     out = np.empty((12, NMONTHLY, NROW, 1440), "float32")
     for m in range(12):
-        ds = xr.open_dataset(f"data/climatology/climatology_{m + 1:02d}.nc")
+        ds = xr.open_dataset(f"data/aotd_climatology/climatology_{m + 1:02d}.nc")
         out[m] = ds[key].values
         ds.close()
     return out

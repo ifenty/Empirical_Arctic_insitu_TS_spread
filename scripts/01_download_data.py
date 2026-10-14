@@ -1,7 +1,7 @@
 """Download all input data needed by the pipeline into data/ (untracked).
 
   data/scatter/AOTD{1983..2023}.nc      AOTD scattered profiles, figshare doi:10.6084/m9.figshare.28825490 (Li et al., CC BY 4.0), ~90 MB
-  data/climatology/climatology_{01..12}.nc  AOTD gridded monthly climatology, figshare doi:10.6084/m9.figshare.27645738 (CC BY 4.0), ~2 GB
+  data/aotd_climatology/climatology_{01..12}.nc  AOTD gridded monthly climatology, figshare doi:10.6084/m9.figshare.27645738 (CC BY 4.0), ~2 GB
   data/woa23_raw/woa23_decav91C0_{t,s}{01..16}_04.nc  WOA23 1991-2020 0.25 deg T and S: 12 monthly + 4 seasonal files, ~18 GB, NOAA NCEI
 
 Existing files of the right size (and, for figshare, matching MD5) are skipped, so the script can be re-run to resume.
@@ -57,7 +57,7 @@ if __name__ == "__main__":
     if a.only in (None, "scatter"):
         figshare(SCATTER_ID, "data/scatter")
     if a.only == "climatology" or (a.only is None and not a.no_climatology):
-        figshare(CLIM_ID, "data/climatology")
+        figshare(CLIM_ID, "data/aotd_climatology")
     if a.only in (None, "woa23"):
         woa23()
     print("done")

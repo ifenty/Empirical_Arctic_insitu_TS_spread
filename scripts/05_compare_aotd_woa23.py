@@ -21,7 +21,7 @@ def published():
     """(12, 2, 57, 121, 1440) float32 published AOTD monthly T,S."""
     arr = np.full((12, 2, 57, 121, 1440), np.nan, dtype="float32")
     for m in range(12):
-        with xr.open_dataset(f"data/climatology/climatology_{m + 1:02d}.nc") as ds:
+        with xr.open_dataset(f"data/aotd_climatology/climatology_{m + 1:02d}.nc") as ds:
             arr[m, 0] = ds["temp"].values
             arr[m, 1] = ds["salt"].values
     return arr
