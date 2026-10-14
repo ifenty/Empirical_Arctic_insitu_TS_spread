@@ -61,7 +61,7 @@ def local_var(pos, resid, nsr, query, glob, p=PARAMS):
     return np.maximum(out, p["floor"] * glob)
 
 
-def oi_stage(idx, resid, n, targets, L, p=PARAMS, chunk=4000):
+def oi_stage(idx, resid, n, targets, L, p=PARAMS, chunk=1000):
     """Local OI of node residuals with a moving-window prior variance. Prior mean of the residual is 0.
 
     Returns increment, posterior variance, prior variance at the targets, nearest-node distance km.
