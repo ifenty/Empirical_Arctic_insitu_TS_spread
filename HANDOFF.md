@@ -61,3 +61,8 @@ Upstream mapping has no temporal decorrelation: weights are purely spatial; `Lt 
 - The wedges/blocks are the circular footprints of the hard radius cutoff (see `reports/reproduction/maps/count_vs_wedges_S_Jan_1500m.png`). Published Jan field is smooth there.
 - Removing the BUG-19 `+1` damping at 1500 m raises Jan S RMSE vs published from 0.0057 to 0.64 psu, so released damping is what matches the published field (`maps/damping_test_S_Jan_1500m.png`).
 - New product design: smooth taper/weights, minimum observation count and maximum distance, NaN beyond them (data-honest), no hard-radius jumps.
+
+## 10 m salinity, Jan/Jun: smooth published vs polygon port (2026-10-13)
+- Port polygons come from the normalised Barnes correction: weights exp(-r^2/(0.2n)) are ~1e-9 beyond a few hundred km, but the correction is (sum w*obs - z*sum w)/sum w, so the nearest observation node dominates (Voronoi-like cells). Published Mar/Sep show the same polygons (and match the port), so that is the released method.
+- Published Jan/Jun are smooth with fine-scale structure: not produced by this method. Level 2 (10 m) Jan S vs published: seasonal field alone r=0.992, RMSE 0.35 psu; port r=0.902, RMSE 1.24; port with denominator sw+1 everywhere r=0.969, RMSE 0.69; sw+0.1 r=0.955; sw+0.01 r=0.943. Any variant of the released monthly correction is worse than no correction, consistent with BUG-29. Monthly correction fields uncorrelated with published (|r|<0.05).
+- Implication for the new product: use a smooth, un-normalised-at-distance estimator (optimal interpolation / kriging-style weights with an explicit prior and error variance) so the field relaxes to the background, not to the nearest obs.
