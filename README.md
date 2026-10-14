@@ -1,4 +1,4 @@
-# empirical Arctic in situ temperature and salinity profile spread relative to climatologies
+# Empirical Arctic in situ temperature and salinity profile spread relative to climatologies
 
 This repository summarizes Arctic in situ temperature and salinity differences from
 two published reference climatologies: WOA23 and AOTD. It produces per-cell **empirical
