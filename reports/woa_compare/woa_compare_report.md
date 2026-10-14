@@ -1,6 +1,6 @@
 # AOTD (published) vs WOA23 decav91C0
 
-Produced by `scripts/05_compare_aotd_woa23.py`. Per-level, per-month numbers: `level_stats.csv`. Depth profiles: `aotd_vs_woa23_vs_depth.png`. Maps (Jan/Mar/Jun/Sep, published | WOA23 | difference) at 10, 100 and 1500 m: `maps/`.
+Produced by `scripts/06_compare_aotd_woa23.py`. Per-level, per-month numbers: `level_stats.csv`. Depth profiles: `aotd_vs_woa23_vs_depth.png`. Maps (Jan/Mar/Jun/Sep, published | WOA23 | difference) at 10, 100 and 1500 m: `maps/`.
 
 ## Method
 - WOA23: objectively analysed `t_an` / `s_an`, monthly, 0.25 deg, 57 levels (0-1500 m), 1991-2020. AOTD: 1983-2023.
@@ -23,6 +23,20 @@ Produced by `scripts/05_compare_aotd_woa23.py`. Per-level, per-month numbers: `l
 | 1500 | 0.05 | 0.07 | +0.02 | 0.01 | **0.63** |
 
 Units: T degC, S psu.
+
+## Figures
+
+**Figure 1. Statistics versus depth (0-1500 m).** Top row temperature, bottom row salinity. Columns: RMSE of AOTD minus WOA23, bias of AOTD minus WOA23, and number of valid cells (dashed: WOA23, January). Lines are for January, March, June and September.
+
+![AOTD vs WOA23 statistics versus depth](aotd_vs_woa23_vs_depth.png)
+
+**Figure 2. Maps at 10 m, 100 m and 1500 m.** Each figure has four rows (January, March, June, September) and three columns: published AOTD, WOA23, and AOTD minus WOA23 (blue-red, symmetric range set by the 98th percentile of the absolute difference). Temperature (T) and salinity (S) are separate figures.
+
+| | temperature | salinity |
+|---|---|---|
+| 10 m | ![T 10 m](maps/aotd_vs_woa23_T_L2_10m.png) | ![S 10 m](maps/aotd_vs_woa23_S_L2_10m.png) |
+| 100 m | ![T 100 m](maps/aotd_vs_woa23_T_L20_100m.png) | ![S 100 m](maps/aotd_vs_woa23_S_L20_100m.png) |
+| 1500 m | ![T 1500 m](maps/aotd_vs_woa23_T_L56_1500m.png) | ![S 1500 m](maps/aotd_vs_woa23_S_L56_1500m.png) |
 
 ## Findings
 1. **Upper ocean (0-100 m): the products differ by 1-2 degC / 1-2 psu RMSE, with correlation 0.87-0.97.** The difference maps show large-scale, coherent patches over the Siberian shelves, Beaufort/Canada Basin and the Atlantic-side seas, not noise. Part of this is real (1983-2023 vs 1991-2020, mapping methods, ice-covered sampling bias), and the published product has hard polygon edges in March (see 10 m S maps).

@@ -14,7 +14,7 @@ Per 100 km cell and standard depth level (pooled over 1992-2023, no time dimensi
     bias = mean(d), n = number of values
 
 Usage (from the repo root): python scripts/03_compute_expected_spread.py   (about 1.5 min, about 4 GB RAM)
-Outputs (untracked): outputs/expected_std/expected_{std,rmse}_from_{woa23,aotd,woa23_and_aotd}_{potential_temperature,salinity}_ease2_100km.nc
+Outputs (untracked): outputs/expected_spread/expected_{std,rmse}_from_{woa23,aotd,woa23_and_aotd}_{potential_temperature,salinity}_ease2_100km.nc
 """
 import os
 import numpy as np
@@ -25,7 +25,7 @@ from pyproj import Transformer
 from potential_temperature import calculate_potential_T
 
 RAW = "data/woa23_raw"
-OUT = "outputs/expected_std"
+OUT = "outputs/expected_spread"
 os.makedirs(OUT, exist_ok=True)
 NMONTHLY = 57  # levels with a monthly WOA23 field (0-1500 m); deeper levels use seasonal
 R0 = 599  # WOA23 lat row of the cell centred on 59.875 N

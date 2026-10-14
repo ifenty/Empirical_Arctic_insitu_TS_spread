@@ -25,7 +25,7 @@ History of the project: it started as an attempt to reproduce the AOTD climatolo
 * **Cleaning on load** (`scripts/scatter_io.py`): in the files only `temp` marks missing values with NaN; salinity and pressure use exactly 0.0 and density holds arbitrary values at missing levels. All are converted to NaN, with salinity/pressure/density invalidated wherever temperature is missing or salinity is 0. The level at 0 m is empty in every profile; the 5 m level is only 67% filled.
 * **Used here:** profiles from 1992 onward (400,281 of 414,221) that fall inside the 100 km grid and the WOA23 domain (60-90°N): 400,280 profiles.
 
-**Provenance (from the paper, plus our best guesses).** The paper reports that 1,453,232 profiles were collected from several programmes and databases (WOD, CMEMS, Argo, Ice-Tethered Profilers, Bolin Centre and NABOS expedition data, and Chinese Arctic Research Expeditions on Xuelong / Xuelong-2), then de-duplicated and passed through a unified QC sequence: position/time checks, depth-reversal and repeatability checks, temperature/salinity range checks, T/S gradient checks, a density-gradient check, interpolation to the WOA standard levels with the Barker & McDougall (2020) interpolation, a second range/gradient check after interpolation, and a 3σ screening. 414,221 profiles survive. The released files carry **no source or platform identifier**, so the mix of sources is not documented. From the sampling pattern (track linking on time, position and depth reach; `scripts/06_scatter_data_report.py`, `reports/scatter/`) our *best guess* is: ~29% ITP-like drifting profilers in the ice-covered basin, ~6% Argo-like 10-day-cycle floats, ~52% ship CTD-like (stations, moorings, gliders and other), and ~14% unclassified. These classes are heuristic and unvalidated; near-duplicates and repeated profiles may remain. Because many profiles come from a few drifting platforms, **profiles are not independent samples** and the profile counts overstate the number of independent observations.
+**Provenance (from the paper, plus our best guesses).** The paper reports that 1,453,232 profiles were collected from several programmes and databases (WOD, CMEMS, Argo, Ice-Tethered Profilers, Bolin Centre and NABOS expedition data, and Chinese Arctic Research Expeditions on Xuelong / Xuelong-2), then de-duplicated and passed through a unified QC sequence: position/time checks, depth-reversal and repeatability checks, temperature/salinity range checks, T/S gradient checks, a density-gradient check, interpolation to the WOA standard levels with the Barker & McDougall (2020) interpolation, a second range/gradient check after interpolation, and a 3σ screening. 414,221 profiles survive. The released files carry **no source or platform identifier**, so the mix of sources is not documented. From the sampling pattern (track linking on time, position and depth reach; `scripts/07_scatter_data_report.py`, `reports/scatter/`) our *best guess* is: ~29% ITP-like drifting profilers in the ice-covered basin, ~6% Argo-like 10-day-cycle floats, ~52% ship CTD-like (stations, moorings, gliders and other), and ~14% unclassified. These classes are heuristic and unvalidated; near-duplicates and repeated profiles may remain. Because many profiles come from a few drifting platforms, **profiles are not independent samples** and the profile counts overstate the number of independent observations.
 
 ### 2.2 Reference climatologies
 
@@ -50,7 +50,7 @@ For every profile value (profile *p*, standard level *k*) from 1992-2023:
    * NaN wherever `n = 0` (no observation); no minimum `n` is imposed, so users should look at `n`.
 6. **Three products** per variable and statistic: `from_woa23`; `from_aotd`; `from_woa23_and_aotd` = elementwise `max` of the two fields (ignoring NaN, so below 1500 m it equals the WOA23-based value). The bias and n written with the combined product belong to whichever reference gave the larger value.
 
-### Output files (`outputs/expected_std/`, NetCDF4, CF-1.8)
+### Output files (`outputs/expected_spread/`, NetCDF4, CF-1.8)
 
 `expected_{std,rmse}_from_{woa23,aotd,woa23_and_aotd}_{potential_temperature,salinity}_ease2_100km.nc`, 12 files. Dimensions `(depth=102, y=180, x=180)`; variables `Theta_std|Theta_rmse` (°C) or `S_std|S_rmse` (practical salinity), `*_bias`, `*_n` (number of values), plus 2-D `lat`, `lon` and a `crs` grid-mapping variable (EPSG:6931, EASE-Grid 2.0 North 100 km).
 
@@ -66,7 +66,7 @@ Medians over cells with data (WOA23-based, then AOTD-based, then combined):
 | S std | 10 m / 100 m / 1500 m | 0.44 / 0.107 / 0.0059 | 0.36 / 0.091 / 0.0048 | 0.47 / 0.112 / 0.0060 |
 | cells with data | 10 m / 100 m / 1500 m | 1666 / 1379 / 579 | 1672 / 1366 / 572 | 1684 / 1388 / 583 |
 
-The spread is largest in the upper ocean over the shelves and the Atlantic-side seas and smallest in the ice-covered central basin and at depth. RMSE is 5-35% larger than std, i.e. the cell-mean offset from WOA23 is not negligible compared with the spread (largest for temperature at depth and salinity at 10-50 m). Data are densest (hundreds to thousands of values per cell) on the Atlantic side and in the Beaufort Sea; at 1500 m, 31% of cells with data have fewer than 5 values. Figures: `reports/expected_std/expected_{std,rmse}_overview_from_*.png` (std/RMSE maps at 10, 100 and 1500 m, log10 of the number of values, median spread and counts versus depth).
+The spread is largest in the upper ocean over the shelves and the Atlantic-side seas and smallest in the ice-covered central basin and at depth. RMSE is 5-35% larger than std, i.e. the cell-mean offset from WOA23 is not negligible compared with the spread (largest for temperature at depth and salinity at 10-50 m). Data are densest (hundreds to thousands of values per cell) on the Atlantic side and in the Beaufort Sea; at 1500 m, 31% of cells with data have fewer than 5 values. Figures: `reports/expected_spread/expected_{std,rmse}_overview_from_*.png` (std/RMSE maps at 10, 100 and 1500 m, log10 of the number of values, median spread and counts versus depth).
 
 ## 5. Interpretation and limitations
 
@@ -144,7 +144,7 @@ combined = np.fmax(from_woa23, from_aotd)          # NaN-ignoring elementwise ma
 
 ```python
 import xarray as xr
-ds = xr.open_dataset("outputs/expected_std/expected_rmse_from_woa23_potential_temperature_ease2_100km.nc")
+ds = xr.open_dataset("outputs/expected_spread/expected_rmse_from_woa23_potential_temperature_ease2_100km.nc")
 ds.Theta_rmse.sel(depth=100, method="nearest").plot()   # 100 m map; NaN where there is no observation
 ```
 

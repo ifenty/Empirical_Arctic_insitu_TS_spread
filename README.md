@@ -28,20 +28,21 @@ Or step by step (always from the repo root):
 |---|---|---|---|
 | a | `python scripts/01_download_data.py` | downloads AOTD scatter + climatology (figshare) and WOA23 monthly/seasonal T, S (NCEI); resumable | `data/` |
 | a | `python scripts/02_prepare_scatter.py` | concatenates yearly scatter files, normalises missing values | `data/scatter_all.npz` |
-| b | `python scripts/03_compute_expected_spread.py` | deviations from the references in potential temperature and salinity, per-cell std/RMSE/bias/n, 3 products (about 1.5 min) | `outputs/expected_std/*.nc` (12 files) |
-| c | `python scripts/04_make_plots.py` | maps at 10/100/1500 m, log10 profile counts, median spread and counts vs depth, for each statistic and product | `reports/expected_std/*.png` (6 files) |
+| b | `python scripts/03_compute_expected_spread.py` | deviations from the references in potential temperature and salinity, per-cell std/RMSE/bias/n, 3 products (about 1.5 min) | `outputs/expected_spread/*.nc` (12 files) |
+| c | `python scripts/04_make_plots.py` | maps at 10/100/1500 m, log10 profile counts, median spread and counts vs depth, for each statistic and product | `reports/expected_spread/*.png` (11 files) |
+| c2 | `python scripts/05_make_report.py` | writes the report with tables and captions | `reports/expected_spread/expected_spread_report.md` |
 
 Optional diagnostics (not needed for the products):
-* `python scripts/05_compare_aotd_woa23.py` compares the published AOTD climatology with WOA23 (-> `reports/woa_compare/`).
-* `python scripts/06_scatter_data_report.py` describes the scattered data, including heuristically inferred platform classes (-> `reports/scatter/`). It also needs the NSIDC EASE-Grid 2.0 N 25 km ancillary files in `data/ease2/` (NSIDC-0772 lat/lon and NSIDC-0609 LOCI land mask; these require a free NASA Earthdata login, so they are not downloaded automatically).
+* `python scripts/06_compare_aotd_woa23.py` compares the published AOTD climatology with WOA23 (-> `reports/woa_compare/`).
+* `python scripts/07_scatter_data_report.py` describes the scattered data, including heuristically inferred platform classes (-> `reports/scatter/`). It also needs the NSIDC EASE-Grid 2.0 N 25 km ancillary files in `data/ease2/` (NSIDC-0772 lat/lon and NSIDC-0609 LOCI land mask; these require a free NASA Earthdata login, so they are not downloaded automatically).
 
 Tests: `pytest tests`.
 
 ## Output files
-`outputs/expected_std/expected_{std,rmse}_from_{woa23,aotd,woa23_and_aotd}_{potential_temperature,salinity}_ease2_100km.nc`; dimensions `(depth 102, y 180, x 180)`, variables `Theta_*` or `S_*` for `std`/`rmse`, plus `*_bias`, `*_n`, 2-D `lat`/`lon` and the EPSG:6931 `crs`. NaN means no observation. See the technical note for definitions.
+`outputs/expected_spread/expected_{std,rmse}_from_{woa23,aotd,woa23_and_aotd}_{potential_temperature,salinity}_ease2_100km.nc`; dimensions `(depth 102, y 180, x 180)`, variables `Theta_*` or `S_*` for `std`/`rmse`, plus `*_bias`, `*_n`, 2-D `lat`/`lon` and the EPSG:6931 `crs`. NaN means no observation. See the technical note for definitions.
 
 ## Layout
-- `scripts/01..06_*.py` pipeline and diagnostics (above); `run_all.sh`
+- `scripts/01..07_*.py` pipeline and diagnostics (above); `run_all.sh`
 - `scripts/scatter_io.py` (loading the scatter files) and `scripts/potential_temperature.py` (UNESCO 1983 potential temperature): helper modules imported by the scripts
 - `docs/technical_note.md` technical note; `reports/` figures and reports; `tests/`
 - `data/` (incl. `data/aotd_climatology/`, `data/woa23_raw/`, `data/scatter/`) and `outputs/` are generated and untracked

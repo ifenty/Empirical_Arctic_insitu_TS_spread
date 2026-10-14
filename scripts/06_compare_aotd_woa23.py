@@ -5,7 +5,7 @@ The published grid is labelled 60.0..90.0 N / -180..179.75 E, but it is taken to
 integer row/column shift). So the comparison is cell for cell, no regridding. WOA23 is 1991-2020, AOTD is 1983-2023.
 
 Outputs: outputs/woa/woa_on_aotd_grid.npy (untracked), reports/woa_compare/{level_stats.csv, *.png, maps/*.png}
-Usage (from the repo root): python scripts/05_compare_aotd_woa23.py
+Usage (from the repo root): python scripts/06_compare_aotd_woa23.py
 """
 import os, sys
 import numpy as np
