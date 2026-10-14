@@ -20,7 +20,7 @@ Valid-cell counts match the released files exactly for temperature in all months
 1. Were the released monthly files for months other than March and September produced by `barnes_month.m` as released, or by an earlier/different version (different radius, kernel width, minimum observation count, first guess)?
 2. Were they computed from the same scatter data (same QC version, same `AOTD.mo` month assignment)?
 3. Could you share the code or parameters, or the intermediate seasonal files (`climatology_seasonal_XX.nc`) used?
-4. The bathymetry file `topographic_land.mat` and `std_data.mat` referenced by the scripts are not in the release. Can they be provided?
+(For reference, `std_data.mat` is loaded by `barnes_season.m` but never used, and we reconstruct the valid-cell mask from the released files, so neither is needed for this question.)
 
 ## Other issues found in the released code
 See `docs/upstream_bug_log.md` (BUG-1 to BUG-29), e.g. the `+1` damping when a single observation is in range (BUG-19), corrections applied only at cells containing observations (BUG-20), observations assigned to several nodes by a Euclidean degree radius (BUG-21), and `mean` versus `nanmean` for salinity (BUG-22).
