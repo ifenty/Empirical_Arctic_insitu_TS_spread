@@ -13,13 +13,29 @@ The scattered profiles are the AOTD *scatter* dataset provided by the authors of
 Reference climatologies: WOA23 decadal (1991-2020) 0.25° monthly and seasonal T and S, NOAA NCEI; and the published AOTD monthly climatology, https://doi.org/10.6084/m9.figshare.27645738.v1.
 
 ## Reproduce
-Requirements: Python >= 3.10, about 20 GB free disk (WOA23 files are large), about 4 GB RAM, internet access.
+Requirements: internet access, about 20 GB free disk (WOA23 files are large), about 4 GB RAM, and **a Python (>= 3.10) environment with every package listed in `requirements.txt`** (numpy, scipy, pandas, xarray, netCDF4, pyproj, matplotlib, cartopy; gsw and pytest are only for the tests). The scripts will fail with `ImportError` if any is missing, so create the environment first.
 
+### 1. Create the Python environment
+Option A: venv + pip (works for people and automated agents; run from the repo root):
 ```bash
 git clone https://github.com/ifenty/AOTD_v2.git && cd AOTD_v2
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate          # every new shell needs this, or call .venv/bin/python directly
+pip install --upgrade pip
 pip install -r requirements.txt
-./run_all.sh            # runs scripts 01-05 below (download takes the longest)
+python -c "import numpy, scipy, pandas, xarray, netCDF4, pyproj, matplotlib, cartopy; print('environment OK')"
+```
+Option B: conda/mamba:
+```bash
+conda create -n aotd_spread -c conda-forge python=3.12 --file requirements.txt
+conda activate aotd_spread
+```
+(Cartopy and netCDF4 need compiled libraries; if `pip install` fails on Linux, use Option B or install the system packages `libgeos-dev libproj-dev libnetcdf-dev`.)
+Automated agents: no shell state persists between commands, so prefix commands with `.venv/bin/python` (or set `PYTHON=.venv/bin/python` for `run_all.sh`) instead of relying on `activate`.
+
+### 2. Run
+```bash
+./run_all.sh            # runs scripts 01-05 below (download takes the longest); uses $PYTHON, default `python`
 ```
 
 Or step by step (always from the repo root):
