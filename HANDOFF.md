@@ -52,3 +52,6 @@ New climatologies will be written as CF-compliant NetCDF4 (matching the publishe
 - Short-radius, min-count Barnes correction on the port seasonal first guess (dead-code `Barnes()` in `cressman_bkg.m` suggests ~80 km radius, >=10 obs): correlation rises to about 0.55 at best (R=50-65 km, min count 10-20) but never approaches 1.0. Grid: kernel exp(-c r^2/(0.2*8e4)), c in {1,4}, R in {50..120} km, min count in {5,10,20}.
 - RMSE vs published is not a useful test here: "no correction" already gives about 0.18 degC.
 Conclusion: unexplained from released code and data. Ask the author for the code/data used for those months. Scripts used were throwaway (in /tmp).
+
+## Temporal treatment (open design item)
+Upstream mapping has no temporal decorrelation: weights are purely spatial; `Lt = 1000` is defined in all three scripts but never used (BUG-26). All years 1983-2023 are pooled equally. The new product should handle time explicitly (time-dependent weights and/or trend removal before mapping), and the uncertainty should include interannual variability. Decision pending with the user (trend removal vs weighting).
