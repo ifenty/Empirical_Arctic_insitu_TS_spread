@@ -1,5 +1,8 @@
 # Empirical Arctic in situ temperature and salinity profile spread relative to climatologies
 
+**Ian Fenty**
+Oct 14, 2026
+
 This repository summarizes Arctic in situ temperature and salinity differences from
 two published reference climatologies: WOA23 and AOTD. It produces per-cell **empirical
 RMSE, population standard deviation, mean offset and comparison count**, on a 100 km
