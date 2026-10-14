@@ -124,8 +124,9 @@ Dimensions are `(depth=102, y=180, x=180)`. Each file contains:
 * Sampling counts: `*_n` (raw comparison count), `*_n_eff` (distinct `(cell, UTC day)` sampling days), `*_n_epochs` (distinct `(cell, year, month)` 1-month synoptic epochs), and `*_n_years` (distinct calendar years 1992–2023),
 * Geographic coordinates (`lat`, `lon`) and EPSG:6931 CRS metadata (`crs`).
 
-AOTD comparisons exist only at 0–1500 m; below that, the combined product equals WOA23.
-See the [technical note](technical_note.md#3-calculation) before use.
+* **Recommended product for ocean state estimation:** Use **`Theta_std_se`** and **`S_std_se`** from
+  `expected_std_from_woa23_and_aotd_{potential_temperature,salinity}_ease2_100km.nc`
+  (see the [technical note](technical_note.md#51-guidance-for-ocean-state-estimation-std_se-versus-rmse_se-and-the-conservative-envelope) before use).
 
 ## Repository layout and scope
 

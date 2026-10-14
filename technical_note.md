@@ -306,7 +306,7 @@ confidence intervals for a mean or future observation.
   spatial regularization across unsampled (`NaN`) cells, and out-of-sample evaluation
   for their application.
 
-### 5.1 Guidance for ocean state estimation: `*_std_se` versus `*_rmse_se`
+### 5.1 Guidance for ocean state estimation: `*_std_se` versus `*_rmse_se` and the conservative envelope
 
 When weighting in situ profile observations in an ocean state estimate or data
 assimilation cost function $J_{\text{obs}} = \sum_i \big((y_i - \mathcal{H}(\mathbf{x})) / \sigma_i\big)^2$:
@@ -324,6 +324,25 @@ assimilation cost function $J_{\text{obs}} = \sum_i \big((y_i - \mathcal{H}(\mat
   freshening, $\mu_{\text{declust}}$ reflects **climatology error** rather than
   random observation scatter; using `*_rmse_se` as $\sigma_i$ would needlessly
   down-weight valid observations in those regions.
+* **Use the conservative envelope product (`expected_std_from_woa23_and_aotd_*`).**
+  For state estimation, we recommend **`Theta_std_se`** and **`S_std_se`** from
+  `expected_std_from_woa23_and_aotd_{potential_temperature,salinity}_ease2_100km.nc`
+  for three reasons:
+  1. *Guards against upper-ocean reference-climatology sensitivity:* In the upper
+     ocean (e.g. 10 m), `from_aotd` exceeds `from_woa23` in 43% of cells for
+     `Theta_std_se` and 18% of cells for `S_std_se` (raising the 10 m median
+     `Theta_std_se` from `0.911 °C` to `0.963 °C` and `S_std_se` from `0.629 psu` to
+     `0.672 psu`), ensuring that observations are not over-weighted where the two
+     reference climatologies resolve different seasonal or frontal structures.
+  2. *Maximizes coastal cell coverage and transitions seamlessly to 5500 m:* Taking
+     the NaN-ignoring elementwise maximum retains valid coastal cells present in
+     either reference mask (`1707` cells at 10 m vs. `1694` in WOA23 alone) and
+     equals the WOA23-based estimate below 1500 m.
+  3. *Robust against the AOTD deep-salinity bias:* Because the 800–1500 m salinity
+     anomaly in the ten non-March/September AOTD monthly files is primarily a mean
+     offset (`bias`) rather than random scatter around the mean, removing the cell
+     mean offset in `S_std_se` leaves the 800–1500 m envelope medians (`0.0182 / 0.0127 / 0.00816 psu`
+     at 800 / 1000 / 1500 m) virtually identical to WOA23 alone (`0.0181 / 0.0126 / 0.00804 psu`).
 * **When `*_rmse_se` is appropriate:** Use `*_rmse_se` only when assimilating
   anomalies defined relative to the static climatology without bias correction, or
   when specifying prior background-state uncertainty $\mathbf{B}$ around a WOA23/AOTD

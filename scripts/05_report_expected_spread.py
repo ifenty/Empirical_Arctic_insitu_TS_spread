@@ -278,16 +278,21 @@ The figures below compare epoch-declustered spread (`*_std_declustered`, column 
 * Applying these pooled spreads to assimilation or prediction requires minimum-count filtering
   (e.g., on `n_eff` and `n_years`), spatial regularization where cells are `NaN`, and a treatment
   of correlated errors.
-* **Guidance for ocean state estimation (`*_std_se` vs. `*_rmse_se`):** When weighting profile
-  observations against an ocean model state (`J_obs = Σ ((y_i − H(x)) / σ_i)²`),
-  use **`*_std_se`** (`Theta_std_se`, `S_std_se` with the 500 km local prior) rather than `*_rmse_se`.
+* **Guidance for ocean state estimation (`*_std_se` vs. `*_rmse_se` and the conservative envelope):**
+  When weighting profile observations against an ocean model state (`J_obs = Σ ((y_i − H(x)) / σ_i)²`),
+  use **`Theta_std_se`** and **`S_std_se`** (500 km local prior) from the conservative envelope product
+  **`expected_std_from_woa23_and_aotd_{{potential_temperature,salinity}}_ease2_100km.nc`** rather than `*_rmse_se`.
   `*_std_se` estimates the random sub-grid, synoptic and interannual spread around the local mean,
   whereas `*_rmse_se` includes the squared mean offset (`*_bias_declustered`) relative to the
   reference climatology—which is often an artifact of climatological smoothing across fronts or
-  multi-decadal warming/freshening trends rather than observation error. Use `*_rmse_se` only when
-  bounding total departure from a static WOA23/AOTD background state (e.g. background error around
-  a climatological initial condition), and apply a modest sensor-accuracy floor at abyssal depths
-  (e.g. `σ_Theta >= 0.01–0.02 °C`, `σ_S >= 0.002–0.005 psu`).
+  multi-decadal warming/freshening trends rather than observation error. Using the combined
+  `from_woa23_and_aotd` envelope for `*_std_se` guards against upper-ocean sensitivity to the choice
+  of reference climatology (where AOTD exceeds WOA23 in 43% of 10 m `Theta_std_se` cells and 18% of
+  `S_std_se` cells), maximizes coastal cell coverage (`1707` cells at 10 m vs. `1694` in WOA23 alone),
+  transitions seamlessly to WOA23 below 1500 m, and remains unaffected by the AOTD 800–1500 m
+  salinity mean bias because cell mean offsets are removed prior to computing `std_se`. Use `*_rmse_se`
+  only when bounding total departure from a static WOA23/AOTD background state, and apply a modest
+  sensor-accuracy floor at abyssal depths (e.g. `σ_Theta >= 0.01–0.02 °C`, `σ_S >= 0.002–0.005 psu`).
 
 ## 7. Data and provenance
 
