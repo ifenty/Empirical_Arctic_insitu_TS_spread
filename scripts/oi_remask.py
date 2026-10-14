@@ -8,7 +8,8 @@ from aotd import oi
 
 levels = [int(x) for x in sys.argv[1:] if "." not in x]
 cut = [float(x) for x in sys.argv[1:] if "." in x]
-cv = pd.read_csv("reports/oi/cv_stats.csv")
+import glob
+cv = pd.concat([pd.read_csv(f) for f in glob.glob("reports/oi/cv_stats_*.csv")])
 for k in levels:
     d = dict(np.load(f"outputs/oi/level_{k}.npz"))
     for name in ("T", "S"):
