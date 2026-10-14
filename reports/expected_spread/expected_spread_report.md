@@ -19,11 +19,11 @@ d = obs − reference for potential temperature (Theta) and practical salinity (
 
 **Figure 1. Median (lines) of expected RMSE, std and RMSE/std over cells, 0–1500 m, for the three products; shading is the 10–90% range of cells for the WOA23 product.** Top: Theta; bottom: S. RMSE/std is shown only for cells with n ≥ 5. Values are largest near the surface and drop by an order of magnitude by 1000 m.
 
-![spread_vs_depth.png](spread_vs_depth.png)
+![spread_vs_depth.png](figures/spread_vs_depth.png)
 
 **Figure 2. As Figure 1 for the WOA23-based product over the full depth range (0–5500 m, symlog axis).**
 
-![spread_vs_depth_full.png](spread_vs_depth_full.png)
+![spread_vs_depth_full.png](figures/spread_vs_depth_full.png)
 
 ### Theta RMSE (°C)
 
@@ -89,15 +89,15 @@ dominate; the central basins are the quietest.
 
 | | std | RMSE |
 |---|---|---|
-| from WOA23 | ![](expected_std_overview_from_woa23.png) | ![](expected_rmse_overview_from_woa23.png) |
-| from AOTD | ![](expected_std_overview_from_aotd.png) | ![](expected_rmse_overview_from_aotd.png) |
-| max of both | ![](expected_std_overview_from_woa23_and_aotd.png) | ![](expected_rmse_overview_from_woa23_and_aotd.png) |
+| from WOA23 | ![](figures/expected_std_overview_from_woa23.png) | ![](figures/expected_rmse_overview_from_woa23.png) |
+| from AOTD | ![](figures/expected_std_overview_from_aotd.png) | ![](figures/expected_rmse_overview_from_aotd.png) |
+| max of both | ![](figures/expected_std_overview_from_woa23_and_aotd.png) | ![](figures/expected_rmse_overview_from_woa23_and_aotd.png) |
 
 ## 4. Bias and reference differences
 
 **Figure 3. Mean offset (observations − WOA23) at 10, 100 and 1500 m.** Colour range is the 98th percentile of |bias|.
 
-![bias_maps_from_woa23.png](bias_maps_from_woa23.png)
+![bias_maps_from_woa23.png](figures/bias_maps_from_woa23.png)
 
 | depth (m) | Theta bias median (°C) | Theta bias 10–90% | S bias median (psu) | S bias 10–90% |
 |---|---|---|---|---|
@@ -113,13 +113,13 @@ dominate; the central basins are the quietest.
 
 **Figure 4. RMSE from the AOTD reference minus RMSE from WOA23.** Blue: the AOTD climatology fits the data better. The AOTD reference tends to give smaller spread, which is why the combined product (max) is usually close to WOA23.
 
-![product_difference_maps.png](product_difference_maps.png)
+![product_difference_maps.png](figures/product_difference_maps.png)
 
 ## 5. Data coverage
 
 **Figure 5. Values used, cells with data, and the percentage of sparse cells (n < 5, n < 30) versus depth.**
 
-![counts_vs_depth.png](counts_vs_depth.png)
+![counts_vs_depth.png](figures/counts_vs_depth.png)
 
 | depth (m) | values used | cells with data | % cells n<5 | % cells n<30 |
 |---|---|---|---|---|
@@ -144,6 +144,8 @@ Statistics in cells with few values are noisy; the deep ocean (> 800 m) is espec
 * Potential temperature was computed from the in situ T and S (UNESCO 1983, reference 0 dbar); differences from in situ-T statistics are small (< 0.002 °C median).
 
 ## 7. Files
+
+`figures/` holds all figures; `tables/level_statistics.csv` has median and 10/90th percentiles of every metric at every depth level and product.
 
 `outputs/expected_spread/expected_{std,rmse}_from_{woa23,aotd,woa23_and_aotd}_{potential_temperature,salinity}_ease2_100km.nc` (12 files; not tracked in git, regenerate with `scripts/03_compute_expected_spread.py`).
 Variables: `<Theta|S>_<std|rmse>`, `<…>_bias`, `<…>_n`, `lat`, `lon`.

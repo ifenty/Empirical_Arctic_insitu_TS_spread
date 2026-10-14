@@ -4,7 +4,7 @@ The published grid is labelled 60.0..90.0 N / -180..179.75 E, but it is taken to
 -179.875..179.875 E, WOA rows 599..719): the ocean mask agrees best at zero shift (level 0: 2.4% mismatch, worse at every other
 integer row/column shift). So the comparison is cell for cell, no regridding. WOA23 is 1991-2020, AOTD is 1983-2023.
 
-Outputs: outputs/woa/woa_on_aotd_grid.npy (untracked), reports/woa_compare/{level_stats.csv, *.png, maps/*.png}
+Outputs: outputs/woa/woa_on_aotd_grid.npy (untracked), reports/woa_compare/{tables/level_stats.csv, figures/*.png, figures/maps/*.png}
 Usage (from the repo root): python scripts/06_compare_aotd_woa23.py
 """
 import os, sys
@@ -28,7 +28,7 @@ def published():
 
 
 RAW, OUT, REP = "data/woa23_raw", "outputs/woa", "reports/woa_compare"
-for d in (OUT, REP, f"{REP}/maps"):
+for d in (OUT, REP, f"{REP}/figures/maps", f"{REP}/tables"):
     os.makedirs(d, exist_ok=True)
 NL = 57
 R0 = 599  # WOA23 lat row of 59.875 N; rows 599..719 cover 59.875..89.875
@@ -81,7 +81,7 @@ def plots(df):
                 a.plot(s[s.month == 1].n_woa, s[s.month == 1].depth, "k--", label="WOA23 (Jan)")
             a.set_ylim(1500, 0); a.set_title(f"{name} {lab}"); a.set_ylabel("depth (m)"); a.grid(alpha=.3)
         ax[v, 0].legend(fontsize=7)
-    fig.tight_layout(); fig.savefig(f"{REP}/aotd_vs_woa23_vs_depth.png", dpi=100); plt.close(fig)
+    fig.tight_layout(); fig.savefig(f"{REP}/figures/aotd_vs_woa23_vs_depth.png", dpi=100); plt.close(fig)
 
 
 def maps(woa, pub, depth, levels=(2, 20, 56), months=((0, "Jan"), (2, "Mar"), (5, "Jun"), (8, "Sep"))):
@@ -102,14 +102,14 @@ def maps(woa, pub, depth, levels=(2, 20, 56), months=((0, "Jan"), (2, "Mar"), (5
                     h = ax.pcolormesh(LON, LAT, f, transform=tr, cmap=cm, vmin=lim[0], vmax=lim[1], shading="auto", rasterized=True)
                     ax.add_feature(cf.LAND, facecolor=".85"); ax.coastlines(lw=.3); ax.set_title(f"{name} {mn} {depth[k]:.0f} m: {t}", fontsize=8)
                     cb = fig.colorbar(h, ax=ax, shrink=.7, pad=.02); cb.ax.tick_params(labelsize=7)
-            fig.tight_layout(); fig.savefig(f"{REP}/maps/aotd_vs_woa23_{name}_L{k}_{depth[k]:.0f}m.png", dpi=80); plt.close(fig)
+            fig.tight_layout(); fig.savefig(f"{REP}/figures/maps/aotd_vs_woa23_{name}_L{k}_{depth[k]:.0f}m.png", dpi=80); plt.close(fig)
 
 
 if __name__ == "__main__":
     pub = published()
     woa = build()
     df, depth = stats(woa, pub)
-    df.to_csv(f"{REP}/level_stats.csv", index=False)
+    df.to_csv(f"{REP}/tables/level_stats.csv", index=False)
     plots(df)
     maps(woa, pub, depth)
     print(df.groupby("var")[["rmse", "bias", "corr"]].median())

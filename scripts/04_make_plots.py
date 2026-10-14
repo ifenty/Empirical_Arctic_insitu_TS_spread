@@ -1,4 +1,4 @@
-"""Figures of the expected-std and expected-RMSE datasets (potential temperature and salinity), written to reports/expected_spread/:
+"""Figures of the expected-std and expected-RMSE datasets (potential temperature and salinity), written to reports/expected_spread/figures/:
   expected_{std,rmse}_overview_from_{product}.png   metric maps, log10 profile-count maps, median metric / counts vs depth
   spread_vs_depth.png, spread_vs_depth_full.png      median and 10-90% range of RMSE, std and RMSE/std versus depth, all products
   bias_maps_from_woa23.png                            mean offset (obs - WOA23) maps
@@ -7,6 +7,7 @@
 Usage (from the repo root): python scripts/04_make_plots.py
 """
 import warnings
+import os
 import numpy as np
 import xarray as xr
 import matplotlib; matplotlib.use("Agg")
@@ -54,7 +55,7 @@ def make(kind, prod):
     ax2.plot(dep, np.maximum(n.sum(1), 1), label="profiles (all cells)")
     ax2.plot(dep, np.maximum((n > 0).sum(1), 1), label="cells with data")
     ax2.set_yscale("log"); ax2.set_xscale("symlog", linthresh=50); ax2.set_xlim(0, 5500); ax2.set_xlabel("depth (m)"); ax2.legend(fontsize=8); ax2.grid(alpha=.3)
-    fig.tight_layout(); fig.savefig(f"reports/expected_spread/expected_{kind}_overview_from_{prod}.png", dpi=90); plt.close(fig)
+    fig.tight_layout(); fig.savefig(f"reports/expected_spread/figures/expected_{kind}_overview_from_{prod}.png", dpi=90); plt.close(fig)
 
 
 for kind in ("std", "rmse"):
@@ -62,11 +63,12 @@ for kind in ("std", "rmse"):
         make(kind, prod)
 
 
+os.makedirs("reports/expected_spread/figures", exist_ok=True)
 PRODS = ("woa23", "aotd", "woa23_and_aotd")
 COL = {"woa23": "C0", "aotd": "C3", "woa23_and_aotd": "k"}
 NAMES = {"Theta": "potential_temperature", "S": "salinity"}
 UNIT = {"Theta": "degC", "S": "psu"}
-OUTD = "reports/expected_spread"
+OUTD = "reports/expected_spread/figures"
 
 
 def load(kind, prod, v):

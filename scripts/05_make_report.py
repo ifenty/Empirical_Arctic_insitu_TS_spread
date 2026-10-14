@@ -1,5 +1,6 @@
 """Write reports/expected_spread/expected_spread_report.md: summary tables computed from the product files in
 outputs/expected_spread/ plus all figures from 04_make_plots.py with captions."""
+import os
 import numpy as np
 import xarray as xr
 
@@ -56,7 +57,7 @@ def bias_table():
 
 
 def fig(name, cap):
-    return f"{cap}\n\n![{name}]({name})\n"
+    return f"{cap}\n\n![{name}](figures/{name})\n"
 
 
 text = f"""# Expected spread of Arctic in situ T and S about reference monthly climatologies
@@ -104,9 +105,9 @@ dominate; the central basins are the quietest.
 
 | | std | RMSE |
 |---|---|---|
-| from WOA23 | ![](expected_std_overview_from_woa23.png) | ![](expected_rmse_overview_from_woa23.png) |
-| from AOTD | ![](expected_std_overview_from_aotd.png) | ![](expected_rmse_overview_from_aotd.png) |
-| max of both | ![](expected_std_overview_from_woa23_and_aotd.png) | ![](expected_rmse_overview_from_woa23_and_aotd.png) |
+| from WOA23 | ![](figures/expected_std_overview_from_woa23.png) | ![](figures/expected_rmse_overview_from_woa23.png) |
+| from AOTD | ![](figures/expected_std_overview_from_aotd.png) | ![](figures/expected_rmse_overview_from_aotd.png) |
+| max of both | ![](figures/expected_std_overview_from_woa23_and_aotd.png) | ![](figures/expected_rmse_overview_from_woa23_and_aotd.png) |
 
 ## 4. Bias and reference differences
 
@@ -131,8 +132,22 @@ Statistics in cells with few values are noisy; the deep ocean (> 800 m) is espec
 
 ## 7. Files
 
+`figures/` holds all figures; `tables/level_statistics.csv` has median and 10/90th percentiles of every metric at every depth level and product.
+
 `outputs/expected_spread/expected_{{std,rmse}}_from_{{woa23,aotd,woa23_and_aotd}}_{{potential_temperature,salinity}}_ease2_100km.nc` (12 files; not tracked in git, regenerate with `scripts/03_compute_expected_spread.py`).
 Variables: `<Theta|S>_<std|rmse>`, `<…>_bias`, `<…>_n`, `lat`, `lon`.
 """
+os.makedirs("reports/expected_spread/tables", exist_ok=True)
+with open("reports/expected_spread/tables/level_statistics.csv", "w") as fh:
+    fh.write("variable,metric,product,depth_m,cells_with_data,median,p10,p90\n")
+    for v in NAMES:
+        for kind in ("rmse", "std", "bias"):
+            for p in PRODS:
+                ds = load("rmse" if kind == "bias" else kind, p, v)
+                f = ds[f"{v}_{kind}"].values; n = ds[f"{v}_n"].values
+                for k, d in enumerate(ds.depth.values):
+                    g = f[k][np.isfinite(f[k])]
+                    if g.size:
+                        fh.write(f"{v},{kind},{p},{d:g},{g.size},{np.median(g):.6g},{np.percentile(g, 10):.6g},{np.percentile(g, 90):.6g}\n")
 open(OUT, "w").write(text)
 print("wrote", OUT)

@@ -29,7 +29,7 @@ Or step by step (always from the repo root):
 | a | `python scripts/01_download_data.py` | downloads AOTD scatter + climatology (figshare) and WOA23 monthly/seasonal T, S (NCEI); resumable | `data/` |
 | a | `python scripts/02_prepare_scatter.py` | concatenates yearly scatter files, normalises missing values | `data/scatter_all.npz` |
 | b | `python scripts/03_compute_expected_spread.py` | deviations from the references in potential temperature and salinity, per-cell std/RMSE/bias/n, 3 products (about 1.5 min) | `outputs/expected_spread/*.nc` (12 files) |
-| c | `python scripts/04_make_plots.py` | maps at 10/100/1500 m, log10 profile counts, median spread and counts vs depth, for each statistic and product | `reports/expected_spread/*.png` (11 files) |
+| c | `python scripts/04_make_plots.py` | maps at 10/100/1500 m, log10 profile counts, median spread and counts vs depth, for each statistic and product | `reports/expected_spread/figures/*.png` (11 files) |
 | c2 | `python scripts/05_make_report.py` | writes the report with tables and captions | `reports/expected_spread/expected_spread_report.md` |
 
 Optional diagnostics (not needed for the products):
