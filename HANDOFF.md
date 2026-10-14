@@ -40,3 +40,8 @@ New climatologies must use the original WOA standard vertical grid (not a custom
 
 ## Output format
 New climatologies will be written as CF-compliant NetCDF4 (matching the published AOTD and WOA23), one file per month like the published product unless the user says otherwise. NaN / `_FillValue` where unsupported; uncertainty, observation count and nearest-observation distance as separate variables. No new climatology files exist yet; the faithful-port reproduction output is `.npy` in `outputs/repro/` (untracked).
+
+## Reproduction diagnosis (2026-10-13)
+- Port reproduces published March and September exactly (level 20: T 0.01/0.08 degC, S ~0.00-0.01 psu; monthly correction fields r=1.00).
+- The other 10 published months lack the monthly obs signal (correction RMS ~0.15 degC vs 0.65 in port, uncorrelated). Not a month-label shift. Logged as BUG-29; confirm with the author. See `reports/reproduction/reproduction_report.md` (Diagnosis).
+- Only level 20 was analysed in depth (`outputs/repro/lvl20_full.npz` holds its annual/seasonal fields). Next: repeat the Mar/Sep vs other-month split over all levels, and add per-month columns to the report. Validate the new product against Mar/Sep only.

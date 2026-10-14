@@ -119,3 +119,13 @@ Status legend: CONFIRMED (verified numerically or by inspection), SUSPECTED (nee
   straits (CAA, Fram) misrepresented; the comparison to WOA23 shows ~2% disagreement in valid points.
 - **BUG-28 (CONFIRMED)** Density: `Lt=1000`, `h=fspecial` and `obs_modas`, `Barnes()` are dead code but left in scripts, with different
   radii constants; `fi`, `Lt` unused.
+
+- **BUG-29 (CONFIRMED, reproduction finding)** The published monthly files for months other than March and September
+  do not contain the monthly observation signal that `barnes_month.m` produces from the released scatter data.
+  At level 20 (T and S), the port reproduces published March and September to RMSE 0.01 degC / 0.00 psu (monthly
+  correction fields correlate 1.0 with the published ones). For the other ten months the published correction
+  relative to the seasonal field has an RMS of about 0.15 degC (0.05 psu), against 0.3-0.7 degC (0.17-0.38 psu) in the
+  port, and the two are uncorrelated (|r| < 0.4). All months have 18k-32k valid observations at this level.
+  Observations from no single other month reproduce the published January or June correction (max r = 0.37), so this
+  is not a month-label shift. Likely cause: the released monthly files for those months came from a different or
+  incomplete run than the released code and scatter data. Needs confirmation from the author.

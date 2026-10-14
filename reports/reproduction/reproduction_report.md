@@ -136,3 +136,15 @@ corr = minimum over months; count_diff = largest |n_port - n_pub| valid cells.
 |      54 |      1400 |  0.197 |            0.593 |  0.002 |   34.902 |  0.081 |           12 |
 |      55 |      1450 |  0.193 |            0.58  |  0.002 |   34.906 |  0.081 |           11 |
 |      56 |      1500 |  0.175 |            0.637 |  0.002 |   34.91  |  0.072 |           20 |
+
+## Diagnosis (added after review)
+
+The per-level statistics above average over all 12 months and hide the main result:
+
+- **March and September are reproduced essentially exactly.** At level 20, port vs published RMSE is 0.01 degC (T, March) / 0.08 degC (T, September) and 0.00-0.01 psu (S). The monthly correction fields (month minus seasonal) correlate 1.00 with the published ones.
+- **The other ten months are not reproduced.** The published correction relative to the seasonal field is about 0.15 degC (0.05 psu) RMS, against 0.3-0.7 degC (0.17-0.38 psu) in the port, and the two are uncorrelated.
+- Published S at 1500 m shows damped values near 0 psu (the BUG-19 `+1` damping) at cells where the port, in some months, has real data (34.9 psu). The published files keep the damped value in every month except September at those cells.
+- This is not a month-label shift: correlating the published January and June corrections with corrections built from each of the 12 months' observations gives at most r = 0.37.
+- Every month has 18k-32k valid observations at level 20, so sparse data does not explain it.
+
+Conclusion: the port is faithful (it matches the months that carry the full monthly signal), and the discrepancy is in the published product for ten of the twelve months. Logged as BUG-29 in `docs/upstream_bug_log.md`; to be confirmed with the author. Scope for the new product: validate against March and September only; do not treat the other published months as ground truth.
