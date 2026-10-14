@@ -37,3 +37,6 @@ The climatology will constrain an ocean model, so it must not contain extrapolat
 
 ## New requirement (2026-10-13): vertical grid
 New climatologies must use the original WOA standard vertical grid (not a custom or reduced one). The scatter data already carries all 102 WOA levels (0-5500 m); the published AOTD uses only the top 57 (0-1500 m). Assumption: use the full 102-level WOA grid wherever data support it, with NaN below the data-supported depth. Confirm with the user whether the 0-1500 m subset is acceptable for the first release.
+
+## Output format
+New climatologies will be written as CF-compliant NetCDF4 (matching the published AOTD and WOA23), one file per month like the published product unless the user says otherwise. NaN / `_FillValue` where unsupported; uncertainty, observation count and nearest-observation distance as separate variables. No new climatology files exist yet; the faithful-port reproduction output is `.npy` in `outputs/repro/` (untracked).
