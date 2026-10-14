@@ -19,7 +19,7 @@ PARAMS = dict(
     rmax_fac=2.0,              # only nodes within rmax_fac * L are used
     nsr_a=0.1, nsr_b=0.3,      # obs noise variance = sigma^2 * (a + b / n_profiles_in_node)
     dmax=150.0,                # km: NaN if the nearest observation node (any month) is further away
-    relerr_max=1.0,            # NaN if calibrated std exceeds this fraction of the local natural variability (loc_sd)
+    relerr_max=5.0,            # NaN if calibrated std exceeds this fraction of the local natural variability (loc_sd)
     Kw=50, Rw=500.0, n0=10, floor=0.02,  # moving window for local variances: nearest Kw nodes within Rw km; shrinkage
 )
 

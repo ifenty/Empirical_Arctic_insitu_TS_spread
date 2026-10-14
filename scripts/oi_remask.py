@@ -16,7 +16,7 @@ for k in levels:
         res = dict(field=d[f"{name}_raw_field"], std=d[f"{name}_raw_std"], dmin=d[f"{name}_dmin"], loc_sd=d[f"{name}_loc_sd"])
         okc = np.isfinite(res["field"][0])
         row = []
-        for rm in (0.5, 0.75, 1.0, 1.5):
+        for rm in (1.0, 2.0, 5.0):
             p = dict(oi.PARAMS, relerr_max=rm)
             f, s = oi.apply_mask(res, infl, p)
             row.append(f"{rm}: {np.isfinite(f[0])[okc].mean():.2f}")

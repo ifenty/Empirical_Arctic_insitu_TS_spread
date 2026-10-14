@@ -79,3 +79,4 @@ Upstream mapping has no temporal decorrelation: weights are purely spatial; `Lt 
 - Mask: NaN if nearest node > 150 km or calibrated std > relerr_max * local_sd (relerr_max now 1.0). `scripts/oi_remask.py` re-applies a mask to saved levels and prints Jan coverage per threshold.
 - CV z-std improved slightly (robust 1.0-2.2). Jan valid fraction at relerr_max=1.0: T 0.28/0.30/0.14, S 0.73/0.57/0.10 (10/100/1500 m).
 - Finding: a relative rule NaNs the central Arctic at 10 m T, where T is near freezing and local_sd is tiny even though absolute errors are small (see `reports/oi/maps/oi_T_L2.png`). Probably needs an absolute floor (max of relative and absolute tolerance); thresholds are a user policy decision.
+- User set relerr_max = 5 (2026-10-13). Jan valid fraction: T 0.59/0.73/0.52, S 0.99/0.98/0.23 (10/100/1500 m). Maps regenerated.
