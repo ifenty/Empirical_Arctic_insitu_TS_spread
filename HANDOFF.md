@@ -89,3 +89,9 @@ Upstream mapping has no temporal decorrelation: weights are purely spatial; `Lt 
 
 ## PAUSED (2026-10-13): building our own product
 User decision: stop developing our own climatology for now. OI prototype (`aotd/oi.py`, levels 10/100/1500 m, K=24, relerr_max=5) is left as-is; K=100 sensitivity test was abandoned (too slow) and K=24 is untested for sensitivity. Remaining ideas, not started: move OI grid to WOA23 centres, run all 102 levels, temporal treatment, QC port, NetCDF output. Active threads: reproduction diagnosis (BUG-29), WOA23 comparison, note to the author (`docs/note_to_author_draft.md`).
+
+## Expected-std datasets (2026-10-13)
+- `scripts/expected_std.py` -> `outputs/expected_std/expected_std_{temperature,salinity}_ease2_100km.nc` (untracked; ~10 MB each, rerun takes ~15 s, 2.6 GB peak). Overview figure `reports/expected_std/expected_std_overview.png`.
+- Dims (depth=102 WOA levels, y=180, x=180), EASE-Grid 2.0 North 100 km (EPSG:6931, verified against the NSIDC 25 km lat/lon file; cell centres +-8950 km, y descending). Variables `T_std`/`S_std` (RMS of obs - WOA23 reference, bias included), `*_bias`, `*_n`, `lat`, `lon`, `crs`. NaN exactly where n == 0 (verified). No time dimension.
+- Reference: WOA23 decav91C0 `t_an`/`s_an`, nearest 0.25 deg cell; monthly field of the profile month for levels 0-1500 m (57 levels), seasonal field (files 13-16: JFM/AMJ/JAS/OND) for deeper levels. All years 1983-2023 pooled (WOA23 is 1991-2020; no year filter). Level 0 (0 m) and the deepest level have no observations.
+- Open: std definition (RMS about the reference vs std about the cell mean bias; cells with small n are noisy: at 1500 m 31% of cells have n < 5); the monthly/seasonal boundary at 1500 m; year filter.
