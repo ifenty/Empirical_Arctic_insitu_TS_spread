@@ -58,7 +58,7 @@ def main(levels):
                   "mean valid frac %.2f" % np.mean(cov), flush=True)
         np.savez(f"{OUT}/level_{k}.npz",
                  **{f"{n}_{q}": a for n, (full, fm, sm) in res_all.items()
-                    for q, a in (("field", fm), ("std", sm), ("raw_field", full["field"]), ("raw_std", full["std"]), ("dmin", full["dmin"]))})
+                    for q, a in (("field", fm), ("std", sm), ("raw_field", full["field"]), ("raw_std", full["std"]), ("dmin", full["dmin"]), ("loc_sd", full["loc_sd"]))})
     pd.DataFrame(rows).to_csv(f"{REP}/cv_stats.csv", index=False)
 
 

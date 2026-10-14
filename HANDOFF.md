@@ -73,3 +73,9 @@ Upstream mapping has no temporal decorrelation: weights are purely spatial; `Lt 
 - CV (withheld 10% of 2x8 degree blocks, all years pooled): formal std is too small (z-std 2-6.5, robust 1.2-2.4); std is inflated by the robust z (`apply_mask(inflate=...)`). CV RMSE: T 1.34/1.01/0.26 degC, S 0.59/0.17/0.059 psu at 10/100/1500 m.
 - Mask: NaN if nearest obs node (all months/years) > 150 km, or calibrated error variance > 0.25 * total node variance. Valid fraction of published-valid cells: T 0.74/0.86/0.90, S 0.99/0.98/0.36 (10/100/1500 m). Thresholds are tunable policy, to confirm with the user.
 - Caveats: ocean mask still taken from the published fields; time pooled equally over 1983-2023 (no trend/decorrelation); nearest-node binning, no QC port yet; error propagation between stages is approximate (seasonal error carried in proportion to (P_m/sigma_m^2)); only 3 levels run. Not yet validated against Mar/Sep beyond the RMSE/corr columns in cv_stats.csv.
+
+## Moving-window OI variances (2026-10-13)
+- `aotd/oi.py`: prior variance is now local (mean squared residual of the Kw=50 nearest nodes within Rw=500 km, noise-deflated, shrunk toward the level value with n0=10, floor 2%); covariance sigma_i*sigma_j*rho; posterior variance uses the local prior. `local_sd` = std of node means in the same window = local natural variability.
+- Mask: NaN if nearest node > 150 km or calibrated std > relerr_max * local_sd (relerr_max now 1.0). `scripts/oi_remask.py` re-applies a mask to saved levels and prints Jan coverage per threshold.
+- CV z-std improved slightly (robust 1.0-2.2). Jan valid fraction at relerr_max=1.0: T 0.28/0.30/0.14, S 0.73/0.57/0.10 (10/100/1500 m).
+- Finding: a relative rule NaNs the central Arctic at 10 m T, where T is near freezing and local_sd is tiny even though absolute errors are small (see `reports/oi/maps/oi_T_L2.png`). Probably needs an absolute floor (max of relative and absolute tolerance); thresholds are a user policy decision.

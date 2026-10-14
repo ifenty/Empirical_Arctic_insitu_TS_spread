@@ -19,7 +19,8 @@ PARAMS = dict(
     rmax_fac=2.0,              # only nodes within rmax_fac * L are used
     nsr_a=0.1, nsr_b=0.3,      # obs noise variance = sigma^2 * (a + b / n_profiles_in_node)
     dmax=150.0,                # km: NaN if the nearest observation node (any month) is further away
-    relerr_max=0.25,           # NaN if calibrated error variance exceeds this fraction of the level's total variance
+    relerr_max=1.0,            # NaN if calibrated std exceeds this fraction of the local natural variability (loc_sd)
+    Kw=50, Rw=500.0, n0=10, floor=0.02,  # moving window for local variances: nearest Kw nodes within Rw km; shrinkage
 )
 
 
@@ -46,42 +47,74 @@ def _chord(km):
     return 2.0 * np.sin(km / (2.0 * R_EARTH))
 
 
-def oi_stage(idx, resid, n, targets, L, p=PARAMS, chunk=4000):
-    """Local OI of node residuals. Returns increment, posterior variance, sigma^2 (prior), nearest-node distance km.
+def local_var(pos, resid, nsr, query, glob, p=PARAMS):
+    """Moving-window prior variance: mean squared residual of the Kw nearest nodes within Rw km of each query point,
+    deflated for observation noise and shrunk toward the level-wide value `glob` when few nodes are in the window."""
+    tree = cKDTree(pos)
+    Kw = min(p["Kw"], len(pos))
+    d, nb = tree.query(query, k=Kw, distance_upper_bound=_chord(p["Rw"]))
+    v = np.isfinite(d)
+    nb = np.where(v, nb, 0)
+    cnt = v.sum(1)
+    loc = (np.where(v, resid[nb] ** 2, 0.0).sum(1) / np.maximum(cnt, 1)) / (1.0 + (np.where(v, nsr[nb], 0.0).sum(1) / np.maximum(cnt, 1)))
+    out = (cnt * loc + p["n0"] * glob) / (cnt + p["n0"])
+    return np.maximum(out, p["floor"] * glob)
 
-    targets: indices into the flattened grid. Prior mean of the residual is 0.
+
+def oi_stage(idx, resid, n, targets, L, p=PARAMS, chunk=4000):
+    """Local OI of node residuals with a moving-window prior variance. Prior mean of the residual is 0.
+
+    Returns increment, posterior variance, prior variance at the targets, nearest-node distance km.
     """
     nt = len(targets)
     if len(idx) < 3:
-        return np.zeros(nt), np.full(nt, np.nan), np.nan, np.full(nt, np.inf)
+        return np.zeros(nt), np.full(nt, np.nan), np.full(nt, np.nan), np.full(nt, np.inf)
     nsr = p["nsr_a"] + p["nsr_b"] / n
-    sig2 = max(np.var(resid) / (1.0 + nsr.mean()), 1e-12)
+    glob = max(np.var(resid) / (1.0 + nsr.mean()), 1e-12)
     pos = TARGET_XYZ[idx]
+    s2_node = local_var(pos, resid, nsr, pos, glob, p)
+    s2_t = local_var(pos, resid, nsr, TARGET_XYZ[targets], glob, p)
+    sn, st = np.sqrt(s2_node), np.sqrt(s2_t)
     tree = cKDTree(pos)
     K = min(p["K"], len(idx))
-    rmax = p["rmax_fac"] * L
-    d, nb = tree.query(TARGET_XYZ[targets], k=K, distance_upper_bound=_chord(rmax))
+    d, nb = tree.query(TARGET_XYZ[targets], k=K, distance_upper_bound=_chord(p["rmax_fac"] * L))
     miss = ~np.isfinite(d)
     nb = np.where(miss, 0, nb)
-    dmin = 2.0 * R_EARTH * np.arcsin(np.minimum(d[:, 0], 2.0) / 2.0)
-    dmin = np.where(miss[:, 0], np.inf, dmin)
+    dkm = 2.0 * R_EARTH * np.arcsin(np.minimum(np.where(miss, 2.0, d), 2.0) / 2.0)
+    dmin = np.where(miss[:, 0], np.inf, dkm[:, 0])
     inc = np.zeros(nt)
-    post = np.full(nt, sig2)
+    post = s2_t.copy()
+    eye = np.eye(K)[None]
     for a in range(0, nt, chunk):
         b = min(a + chunk, nt)
         nbc, ms = nb[a:b], miss[a:b]
-        P = pos[nbc]                                            # (m,K,3)
+        P = pos[nbc]
         ch = np.linalg.norm(P[:, :, None, :] - P[:, None, :, :], axis=-1)
         rr = 2.0 * R_EARTH * np.arcsin(np.minimum(ch, 2.0) / 2.0)
-        C = sig2 * np.exp(-(rr / L) ** 2)
-        c = sig2 * np.exp(-((2.0 * R_EARTH * np.arcsin(np.minimum(d[a:b], 2.0) / 2.0)) / L) ** 2)
+        s = sn[nbc]
+        C = s[:, :, None] * s[:, None, :] * np.exp(-(rr / L) ** 2)
+        c = st[a:b, None] * s * np.exp(-(dkm[a:b] / L) ** 2)
         c = np.where(ms, 0.0, c)
         C = np.where(ms[:, :, None] | ms[:, None, :], 0.0, C)
-        C = C + (sig2 * nsr[nbc] + np.where(ms, 1.0, 0.0) * sig2)[:, :, None] * np.eye(K)[None]
+        C = C + (s**2 * nsr[nbc] + np.where(ms, 1.0, 0.0) * s2_t[a:b, None])[:, :, None] * eye
         w = np.linalg.solve(C, c[:, :, None])[:, :, 0]
         inc[a:b] = (w * np.where(ms, 0.0, resid[nbc])).sum(1)
-        post[a:b] = sig2 - (w * c).sum(1)
-    return inc, np.maximum(post, 0.0), sig2, dmin
+        post[a:b] = s2_t[a:b] - (w * c).sum(1)
+    return inc, np.maximum(post, 0.0), s2_t, dmin
+
+
+def local_sd(idx, m, targets, p=PARAMS):
+    """Local natural variability: std of node means in the moving window (all months/years pooled)."""
+    pos = TARGET_XYZ[idx]
+    tree = cKDTree(pos)
+    Kw = min(p["Kw"], len(idx))
+    d, nb = tree.query(TARGET_XYZ[targets], k=Kw, distance_upper_bound=_chord(p["Rw"]))
+    v = np.isfinite(d)
+    nb = np.where(v, nb, 0)
+    cnt = v.sum(1)
+    vals = np.where(v, m[nb], np.nan)
+    sd = np.sqrt(np.nanvar(vals, axis=1))
+    return np.where(cnt >= 5, sd, np.nan)
 
 
 def run_variable(flat, val, month, ok, exclude=None, p=PARAMS):
@@ -89,18 +122,15 @@ def run_variable(flat, val, month, ok, exclude=None, p=PARAMS):
 
     flat: node index of each profile; val: values; month: 1..12; ok: (NY*NX,) bool valid ocean cells at this level;
     exclude: optional bool per profile to withhold (cross-validation).
-    Returns dict(field (12,NY,NX), std (12,NY,NX), dmin (NY,NX), tot_var float).
+    Returns dict(field (12,NY,NX), std (12,NY,NX), dmin (NY,NX), loc_sd (NY,NX)).
     """
     use = np.ones(len(val), bool) if exclude is None else ~exclude
     tgt = np.nonzero(ok)[0]
-    # annual
     idx, m, n = node_table(flat, val, use)
-    mu = np.average(m, weights=None)
-    tot_var = float(np.var(m))
+    mu = m.mean()
     inc, P_a, s2_a, dmin = oi_stage(idx, m - mu, n, tgt, p["L"][0], p)
+    lsd = local_sd(idx, m, tgt, p)
     A = np.full(NY * NX, np.nan); A[tgt] = mu + inc
-    # nodes may lie outside `ok` (e.g. in cells masked at this level); drop them
-    A_full = A.copy()
     PA = np.full(NY * NX, np.nan); PA[tgt] = P_a
     field = np.full((12, NY * NX), np.nan)
     err2 = np.full((12, NY * NX), np.nan)
@@ -110,18 +140,17 @@ def run_variable(flat, val, month, ok, exclude=None, p=PARAMS):
         idx, m, n = node_table(flat, val, sel)
         keep = ok[idx]
         idx, m, n = idx[keep], m[keep], n[keep]
-        inc, P_s, s2_s, _ = oi_stage(idx, m - A_full[idx], n, tgt, p["L"][1], p)
-        S = np.full(NY * NX, np.nan); S[tgt] = A_full[tgt] + (inc if len(idx) >= 3 else 0)
+        inc, P_s, s2_s, _ = oi_stage(idx, m - A[idx], n, tgt, p["L"][1], p)
+        S = np.full(NY * NX, np.nan); S[tgt] = A[tgt] + inc
         Pst = np.full(NY * NX, np.nan)
-        if np.isfinite(s2_s):  # seasonal error carried in proportion to how little the data reduced the prior variance
+        if len(idx) >= 3:  # error of the previous stage is carried in proportion to how little the data reduced the prior
             Pst[tgt] = P_s + (P_s / s2_s) * PA[tgt]
         else:
             Pst[tgt] = PA[tgt]
-        seas[s] = (S, Pst, s2_s)
-    s2_months = []
-    nodata = []
+        seas[s] = (S, Pst)
+    s2_months, nodata = [], []
     for mo in range(1, 13):
-        S, Pst, s2_s = seas[SEASON_OF_MONTH[mo - 1]]
+        S, Pst = seas[SEASON_OF_MONTH[mo - 1]]
         sel = (month == mo) & use
         idx, m, n = node_table(flat, val, sel)
         keep = ok[idx]
@@ -131,14 +160,14 @@ def run_variable(flat, val, month, ok, exclude=None, p=PARAMS):
             field[mo - 1, tgt] = S[tgt] + inc
             err2[mo - 1, tgt] = P_m + (P_m / s2_m) * Pst[tgt]
             s2_months.append(s2_m)
-        else:  # no monthly information: seasonal field with the typical monthly anomaly variance added
+        else:  # no monthly information: seasonal field with the typical local monthly anomaly variance added
             field[mo - 1, tgt] = S[tgt]
             err2[mo - 1, tgt] = Pst[tgt]
             nodata.append(mo - 1)
     for mi in nodata:
-        err2[mi, tgt] += np.median(s2_months) if s2_months else 0.0
+        err2[mi, tgt] += np.nanmedian(s2_months, axis=0) if s2_months else 0.0
     return dict(field=field.reshape(12, NY, NX), std=np.sqrt(err2).reshape(12, NY, NX),
-                dmin=_scatter(dmin, tgt), tot_var=tot_var)
+                dmin=_scatter(dmin, tgt), loc_sd=_scatter(lsd, tgt))
 
 
 def _scatter(v, tgt):
@@ -148,13 +177,12 @@ def _scatter(v, tgt):
 
 
 def apply_mask(res, inflate=1.0, p=PARAMS):
-    """NaN where the nearest observation node is beyond dmax or the calibrated error variance exceeds
-    relerr_max * total variance. `inflate` is the empirical cross-validation calibration of the formal std."""
+    """NaN where the nearest observation node is beyond dmax, or the calibrated std exceeds relerr_max times the local
+    natural variability. `inflate` is the empirical cross-validation calibration of the formal std."""
     bad = ~(res["dmin"] <= p["dmax"])
-    f = np.where(bad[None], np.nan, res["field"])
-    s = np.where(bad[None], np.nan, res["std"] * inflate)
-    bad2 = s**2 > p["relerr_max"] * res["tot_var"]
-    return np.where(bad2, np.nan, f), np.where(bad2, np.nan, s)
+    s = res["std"] * inflate
+    bad2 = bad[None] | ~(s <= p["relerr_max"] * res["loc_sd"][None])
+    return np.where(bad2, np.nan, res["field"]), np.where(bad2, np.nan, s)
 
 
 def block_holdout(flat, frac=0.1, di=8, dj=32, seed=0):
