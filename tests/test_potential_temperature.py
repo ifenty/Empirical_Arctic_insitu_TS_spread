@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from aotd.potential_temperature import calculate_adiabatic_T_gradient, calculate_potential_T, depth_to_pressure
+from potential_temperature import calculate_adiabatic_T_gradient, calculate_potential_T, depth_to_pressure
 
 
 def test_adiabatic_gradient_unesco_check_value():

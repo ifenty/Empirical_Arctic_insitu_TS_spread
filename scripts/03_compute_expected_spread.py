@@ -2,7 +2,7 @@
 
 For every in situ profile value (scatter data, 1992 onwards) the deviation d = obs - reference is formed at the profile's location
 (nearest WOA23 0.25 deg cell). Both the observation and the reference are converted to potential temperature (UNESCO 1983, surface
-reference, aotd/potential_temperature.py) BEFORE differencing: d_theta = theta(T_obs, S_obs) - theta(T_ref, S_ref). WOA23 t_an, the scatter
+reference, scripts/potential_temperature.py) BEFORE differencing: d_theta = theta(T_obs, S_obs) - theta(T_ref, S_ref). WOA23 t_an, the scatter
 T and the published AOTD T are all treated as in situ. Where S_obs is missing but T_obs is valid, S_ref is used transiently for theta(T_obs).
 References (one product each):
     woa23           WOA23 decav91C0 monthly (0-1500 m) or seasonal (deeper) field of the profile month/season
@@ -22,8 +22,7 @@ import sys
 import xarray as xr
 from pyproj import Transformer
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from aotd.potential_temperature import calculate_potential_T
+from potential_temperature import calculate_potential_T
 
 RAW = "data/woa23_raw"
 OUT = "outputs/expected_std"

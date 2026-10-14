@@ -242,7 +242,7 @@ There are 11,428,386 T observations in 0-1500 m but only 383,501 below 1500 m (3
 
 ### Surface-level artefact and T/S consistency (computed)
 
-The 0 m level contains **0** valid T values and 0 valid S values (100.0% empty). The 5 m level is 67.0% filled and the 10 m level 90.3% (15 m: 90.3%). The lower fill at 5 m is consistent with the upstream interpolation blanking the level nearest the first observation; near-surface (0-10 m) statistics must therefore be read as 5/10 m values. T and S are valid together in 11,811,886 level-values; cells where exactly one of them is valid: 1. Missing values are NaN after `aotd.io.load_scatter` / `data/scatter_all.npz` normalisation (raw yearly files use 0.0 for missing S/pres and arbitrary numbers for dens, so they are never read directly here).
+The 0 m level contains **0** valid T values and 0 valid S values (100.0% empty). The 5 m level is 67.0% filled and the 10 m level 90.3% (15 m: 90.3%). The lower fill at 5 m is consistent with the upstream interpolation blanking the level nearest the first observation; near-surface (0-10 m) statistics must therefore be read as 5/10 m values. T and S are valid together in 11,811,886 level-values; cells where exactly one of them is valid: 1. Missing values are NaN after `scatter_io.load_scatter` / `data/scatter_all.npz` normalisation (raw yearly files use 0.0 for missing S/pres and arbitrary numbers for dens, so they are never read directly here).
 
 ## 5. Regional distribution
 

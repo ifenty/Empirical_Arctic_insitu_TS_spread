@@ -22,7 +22,7 @@ History of the project: it started as an attempt to reproduce the AOTD climatolo
 
 * **Source:** the AOTD *scatter* dataset, 414,221 quality-controlled temperature and salinity profiles for 1983-2023 north of 60°N, interpolated to the 102 WOA standard depth levels (0-5500 m), one NetCDF file per year. Li, J. (2025), *AOTD_scatter*, figshare, https://doi.org/10.6084/m9.figshare.28825490.v1 (CC BY 4.0). We thank the AOTD authors (J. Li, X. Wu and X. Wang) for making these data available. Paper: Li, J., Wu, X. & Wang, X. (2025), An Arctic Ocean Thermohaline Dataset, *Scientific Data* 12, 1607, https://doi.org/10.1038/s41597-025-05855-3.
 * **Variables used:** latitude, longitude, time, temperature `temp` (treated as in situ, ITS-90), practical salinity `salt`. The files also carry `pres` and `dens`, which are not used.
-* **Cleaning on load** (`aotd/io.py`): in the files only `temp` marks missing values with NaN; salinity and pressure use exactly 0.0 and density holds arbitrary values at missing levels. All are converted to NaN, with salinity/pressure/density invalidated wherever temperature is missing or salinity is 0. The level at 0 m is empty in every profile; the 5 m level is only 67% filled.
+* **Cleaning on load** (`scripts/scatter_io.py`): in the files only `temp` marks missing values with NaN; salinity and pressure use exactly 0.0 and density holds arbitrary values at missing levels. All are converted to NaN, with salinity/pressure/density invalidated wherever temperature is missing or salinity is 0. The level at 0 m is empty in every profile; the 5 m level is only 67% filled.
 * **Used here:** profiles from 1992 onward (400,281 of 414,221) that fall inside the 100 km grid and the WOA23 domain (60-90°N): 400,280 profiles.
 
 **Provenance (from the paper, plus our best guesses).** The paper reports that 1,453,232 profiles were collected from several programmes and databases (WOD, CMEMS, Argo, Ice-Tethered Profilers, Bolin Centre and NABOS expedition data, and Chinese Arctic Research Expeditions on Xuelong / Xuelong-2), then de-duplicated and passed through a unified QC sequence: position/time checks, depth-reversal and repeatability checks, temperature/salinity range checks, T/S gradient checks, a density-gradient check, interpolation to the WOA standard levels with the Barker & McDougall (2020) interpolation, a second range/gradient check after interpolation, and a 3σ screening. 414,221 profiles survive. The released files carry **no source or platform identifier**, so the mix of sources is not documented. From the sampling pattern (track linking on time, position and depth reach; `scripts/06_scatter_data_report.py`, `reports/scatter/`) our *best guess* is: ~29% ITP-like drifting profilers in the ice-covered basin, ~6% Argo-like 10-day-cycle floats, ~52% ship CTD-like (stations, moorings, gliders and other), and ~14% unclassified. These classes are heuristic and unvalidated; near-duplicates and repeated profiles may remain. Because many profiles come from a few drifting platforms, **profiles are not independent samples** and the profile counts overstate the number of independent observations.
@@ -80,7 +80,7 @@ The spread is largest in the upper ocean over the shelves and the Atlantic-side 
 
 ## Appendix A: code excerpts
 
-Full code: `scripts/03_compute_expected_spread.py`, `aotd/potential_temperature.py`.
+Full code: `scripts/03_compute_expected_spread.py`, `scripts/potential_temperature.py`.
 
 **A.1 Cell indices (EASE-Grid 2.0 North 100 km and WOA23 0.25°).**
 
@@ -112,7 +112,7 @@ d_S = s_o - Sr
 ```
 
 ```python
-# aotd/potential_temperature.py (excerpt): pressure from depth and latitude, UNESCO 1983 / Saunders & Fofonoff
+# scripts/potential_temperature.py (excerpt): pressure from depth and latitude, UNESCO 1983 / Saunders & Fofonoff
 def depth_to_pressure(depth, lat):
     magic_number = 5.92e-3 + np.sin(np.abs(lat) * np.pi / 180) ** 2 * 5.25e-3
     return ((1 - magic_number) - np.sqrt(((1 - magic_number) ** 2) - (8.84e-6 * depth))) / 4.42e-6

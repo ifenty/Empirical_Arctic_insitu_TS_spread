@@ -42,7 +42,7 @@ Tests: `pytest tests`.
 
 ## Layout
 - `scripts/01..06_*.py` pipeline and diagnostics (above); `run_all.sh`
-- `aotd/` helper package: `io.py` (loading the scatter files), `potential_temperature.py` (UNESCO 1983 potential temperature)
+- `scripts/scatter_io.py` (loading the scatter files) and `scripts/potential_temperature.py` (UNESCO 1983 potential temperature): helper modules imported by the scripts
 - `docs/technical_note.md` technical note; `reports/` figures and reports; `tests/`
 - `data/` (incl. `data/aotd_climatology/`, `data/woa23_raw/`, `data/scatter/`) and `outputs/` are generated and untracked
 

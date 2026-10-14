@@ -30,7 +30,6 @@ from scipy.spatial import cKDTree
 warnings.filterwarnings("ignore")
 ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
-sys.path.insert(0, str(ROOT))
 OUT = ROOT / "reports" / "scatter"
 FIG = OUT / "figures"
 TAB = OUT / "tables"
@@ -113,7 +112,7 @@ if NPZ.exists():
     year = z["year"].astype(int)
     month = z["month"].astype(int)
 else:
-    from aotd.io import load_scatter
+    from scatter_io import load_scatter
 
     d = load_scatter()
     lat, lon = d["lat"], d["lon"]
@@ -792,7 +791,7 @@ add(4, "### Surface-level artefact and T/S consistency (computed)\n",
     f"(15 m: {pct(float(vT[:, 3].mean()), 1)}). The lower fill at 5 m is consistent with the upstream interpolation "
     f"blanking the level nearest the first observation; near-surface (0-10 m) statistics must therefore be read "
     f"as 5/10 m values. T and S are valid together in {int((vT & vS).sum()):,} level-values; cells where exactly one of "
-    f"them is valid: {n_mismatch:,}. Missing values are NaN after `aotd.io.load_scatter` / `data/scatter_all.npz` "
+    f"them is valid: {n_mismatch:,}. Missing values are NaN after `scatter_io.load_scatter` / `data/scatter_all.npz` "
     f"normalisation (raw yearly files use 0.0 for missing S/pres and arbitrary numbers for dens, so they are never read "
     f"directly here).\n")
 log("section 4 done")
