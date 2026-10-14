@@ -45,3 +45,10 @@ New climatologies will be written as CF-compliant NetCDF4 (matching the publishe
 - Port reproduces published March and September exactly (level 20: T 0.01/0.08 degC, S ~0.00-0.01 psu; monthly correction fields r=1.00).
 - The other 10 published months lack the monthly obs signal (correction RMS ~0.15 degC vs 0.65 in port, uncorrelated). Not a month-label shift. Logged as BUG-29; confirm with the author. See `reports/reproduction/reproduction_report.md` (Diagnosis).
 - Only level 20 was analysed in depth (`outputs/repro/lvl20_full.npz` holds its annual/seasonal fields). Next: repeat the Mar/Sep vs other-month split over all levels, and add per-month columns to the report. Validate the new product against Mar/Sep only.
+
+### Hypotheses tested for the 10 non-Mar/Sep published months (level 20 T, January) - none reproduce them
+- Month-label shift (obs from each of the 12 months): max correlation of correction with published = 0.37.
+- Year subsets of January obs (eras, single years, <=2012/2020/2022, >=2005): max 0.21.
+- Short-radius, min-count Barnes correction on the port seasonal first guess (dead-code `Barnes()` in `cressman_bkg.m` suggests ~80 km radius, >=10 obs): correlation rises to about 0.55 at best (R=50-65 km, min count 10-20) but never approaches 1.0. Grid: kernel exp(-c r^2/(0.2*8e4)), c in {1,4}, R in {50..120} km, min count in {5,10,20}.
+- RMSE vs published is not a useful test here: "no correction" already gives about 0.18 degC.
+Conclusion: unexplained from released code and data. Ask the author for the code/data used for those months. Scripts used were throwaway (in /tmp).
