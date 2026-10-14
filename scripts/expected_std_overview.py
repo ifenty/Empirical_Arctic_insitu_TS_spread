@@ -1,4 +1,4 @@
-"""Overview figure of the expected-std datasets: std maps, log10 profile-count maps, and depth profiles.
+"""Overview figure of the WOA23-based expected-std datasets (maps), with median std vs depth for all three products: std maps, log10 profile-count maps, and depth profiles.
 Usage: PYTHONPATH=. python scripts/expected_std_overview.py
 """
 import numpy as np
@@ -10,7 +10,7 @@ import cartopy.crs as ccrs, cartopy.feature as cf
 D = "outputs/expected_std"
 LEVELS = (2, 20, 56)
 tr = ccrs.PlateCarree()
-ds = {v: xr.open_dataset(f"{D}/expected_std_{nm}_ease2_100km.nc") for v, nm in (("T", "temperature"), ("S", "salinity"))}
+ds = {v: xr.open_dataset(f"{D}/expected_std_from_woa23_{nm}_ease2_100km.nc") for v, nm in (("T", "temperature"), ("S", "salinity"))}
 dep = ds["T"].depth.values
 lat, lon = ds["T"].lat.values, ds["T"].lon.values
 same_n = bool(np.array_equal(ds["T"]["T_n"].values, ds["S"]["S_n"].values))
@@ -36,10 +36,11 @@ for r, (var, v, cmap, lab) in enumerate(rows):
         ax.set_title(f"{var if not lab else 'log10 N (' + v + ')'} at {dep[k]:.0f} m", fontsize=9)
         cb = fig.colorbar(m, ax=ax, shrink=.7); cb.ax.tick_params(labelsize=7)
 ax1 = fig.add_subplot(nr, 2, 2 * nr - 1)
-for v in "TS":
-    s = ds[v][f"{v}_std"].values.reshape(len(dep), -1)
-    with np.errstate(all="ignore"):
-        ax1.plot(dep, np.nanmedian(s, axis=1), label=f"{v}_std, median over cells")
+import warnings; warnings.simplefilter("ignore")
+for v, nm in (("T", "temperature"), ("S", "salinity")):
+    for k, ls in (("woa23", "-"), ("aotd", "--"), ("woa23_and_aotd", ":")):
+        s = xr.open_dataset(f"{D}/expected_std_from_{k}_{nm}_ease2_100km.nc")[f"{v}_std"].values.reshape(len(dep), -1)
+        ax1.plot(dep, np.nanmedian(s, axis=1), ls, color="C0" if v == "T" else "C1", label=f"{v} from {k}")
 ax1.set_xscale("symlog", linthresh=50); ax1.set_xlabel("depth (m)"); ax1.legend(fontsize=8); ax1.grid(alpha=.3)
 ax2 = fig.add_subplot(nr, 2, 2 * nr)
 n = ds["T"]["T_n"].values.reshape(len(dep), -1)

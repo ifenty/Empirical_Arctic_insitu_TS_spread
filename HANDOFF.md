@@ -95,3 +95,9 @@ User decision: stop developing our own climatology for now. OI prototype (`aotd/
 - Dims (depth=102 WOA levels, y=180, x=180), EASE-Grid 2.0 North 100 km (EPSG:6931, verified against the NSIDC 25 km lat/lon file; cell centres +-8950 km, y descending). Variables `T_std`/`S_std` (RMS of obs - WOA23 reference, bias included), `*_bias`, `*_n`, `lat`, `lon`, `crs`. NaN exactly where n == 0 (verified). No time dimension.
 - Reference: WOA23 decav91C0 `t_an`/`s_an`, nearest 0.25 deg cell; monthly field of the profile month for levels 0-1500 m (57 levels), seasonal field (files 13-16: JFM/AMJ/JAS/OND) for deeper levels. Only profiles from 1992 onward (YEAR0 in the script; 400,280 of 414,221 profiles, user request). Level 0 (0 m) and the deepest level have no observations.
 - Open: std definition (RMS about the reference vs std about the cell mean bias; cells with small n are noisy: at 1500 m 31% of cells have n < 5); the monthly/seasonal boundary at 1500 m; year filter.
+
+## Expected-std products renamed (three variants)
+`scripts/expected_std.py` now writes `outputs/expected_std/expected_std_from_{woa23,aotd,woa23_and_aotd}_{temperature,salinity}_ease2_100km.nc`
+(1992+, EASE2 100 km, 102 levels). `from_aotd` uses the published monthly AOTD (0-1500 m, treated as WOA23 grid, rows 599-719) as reference, so it is NaN
+below 1500 m; `from_woa23_and_aotd` = fmax(woa23, aotd) ignoring NaN (WOA23 alone below 1500 m; bias/n from the larger-std product). Median std at 10 m:
+T 0.84/0.76/0.92 C, S 0.60/0.43/0.64 (woa23/aotd/max).
