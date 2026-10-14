@@ -43,7 +43,11 @@ def build():
     return np.load(f, mmap_mode="r")
 
 
-def stats(woa, pub, depth):
+def stats(woa, pub, depth, lat=None):
+    if lat is None:
+        lat = -89.875 + np.arange(R0, 720) * 0.25
+    w_lat = np.cos(np.deg2rad(lat)).astype("float64")[:, None]
+    w_2d = np.broadcast_to(w_lat, (len(lat), woa.shape[-1]))
     rows = []
     for k in range(len(depth)):
         for v, name in enumerate(("T", "S")):
@@ -52,12 +56,27 @@ def stats(woa, pub, depth):
                 both = np.isfinite(a) & np.isfinite(b)
                 row = dict(level=k, depth=float(depth[k]), var=name, month=m + 1, n_aotd=int(np.isfinite(a).sum()),
                            n_woa=int(np.isfinite(b).sum()), n_both=int(both.sum()),
-                           bias=np.nan, rmse=np.nan, maxabs=np.nan, corr=np.nan)
+                           bias=np.nan, rmse=np.nan, bias_unweighted=np.nan, rmse_unweighted=np.nan,
+                           maxabs=np.nan, corr=np.nan)
                 if both.sum() > 10:
                     av, bv = a[both].astype("float64"), b[both].astype("float64")
+                    wv = w_2d[both]
+                    wsum = wv.sum()
                     d = av - bv
-                    row.update(bias=float(d.mean()), rmse=float(np.sqrt((d**2).mean())), maxabs=float(np.abs(d).max()),
-                               corr=float(np.corrcoef(av, bv)[0, 1]) if np.ptp(av) > 0 and np.ptp(bv) > 0 else np.nan)
+                    w_bias = float(np.sum(wv * d) / wsum)
+                    w_rmse = float(np.sqrt(np.sum(wv * (d ** 2)) / wsum))
+                    da = av - np.sum(wv * av) / wsum
+                    db = bv - np.sum(wv * bv) / wsum
+                    denom = np.sqrt(np.sum(wv * da ** 2) * np.sum(wv * db ** 2))
+                    w_corr = float(np.sum(wv * da * db) / denom) if denom > 0 and np.ptp(av) > 0 and np.ptp(bv) > 0 else np.nan
+                    row.update(
+                        bias=w_bias,
+                        rmse=w_rmse,
+                        bias_unweighted=float(d.mean()),
+                        rmse_unweighted=float(np.sqrt((d ** 2).mean())),
+                        maxabs=float(np.abs(d).max()),
+                        corr=w_corr,
+                    )
                 rows.append(row)
     return pd.DataFrame(rows)
 
@@ -132,10 +151,12 @@ Practical salinity (S) is conventionally labelled psu.
   57 levels from 0 to 1500 m, reference period 1991–2020.
 * AOTD: published monthly fields for the dataset spanning 1983–2023.
 * Each monthly statistic uses cells finite in **both** fields at the selected depth.
-  Cells have equal weight; no area weighting is applied on this latitude–longitude
-  grid. Masks may differ between months, variables and depths.
-* RMSE = √mean((AOTD − WOA23)²); offset (`bias` in the CSV) = mean(AOTD − WOA23).
-  Correlation is spatial Pearson correlation on the same finite-cell intersection.
+  Because 0.25° latitude–longitude cells converge toward the pole, primary summary
+  statistics (`rmse`, `bias`, `corr`) weight each cell by **cos(latitude)**; unweighted
+  grid-index means (`rmse_unweighted`, `bias_unweighted`) are also recorded in the CSV.
+  Masks may differ between months, variables and depths.
+* Area-weighted RMSE = √(Σ w(AOTD − WOA23)² / Σ w); area-weighted offset (`bias` in the CSV) = Σ w(AOTD − WOA23) / Σ w, with w = cos(lat).
+  Correlation is the cos(lat)-weighted spatial Pearson correlation on the same finite-cell intersection.
   Statistics require more than ten shared cells. These summaries are not sampling
   confidence intervals.
 
@@ -282,7 +303,7 @@ def main():
     with xr.open_dataset(f"{RAW}/woa23_decav91C0_t01_04.nc", decode_times=False) as ds:
         depth = ds.depth.values
         lat, lon = ds.lat.values[R0:720], ds.lon.values
-    df = stats(woa, pub, depth)
+    df = stats(woa, pub, depth, lat=lat)
     alignment = mask_diagnostics(woa, pub, depth)
     df.to_csv(f"{REP}/tables/level_stats.csv", index=False)
     alignment.to_csv(f"{REP}/tables/mask_alignment.csv", index=False)

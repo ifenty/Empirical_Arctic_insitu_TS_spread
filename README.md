@@ -5,16 +5,19 @@ Oct 14, 2026
 
 This repository summarizes Arctic in situ temperature and salinity differences from
 two published reference climatologies: WOA23 and AOTD. It produces per-cell **empirical
-RMSE, population standard deviation, mean offset and comparison count**, on a 100 km
+RMSE, sample standard deviation (`ddof=1`), mean offset, comparison count (`n`),
+effective sampling-day count (`n_eff`) and distinct year count (`n_years`)**, on a 100 km
 EASE-Grid 2.0 North grid (EPSG:6931) at 102 WOA standard depths.
 
-The analysis pools profiles from 1992 onward, comparing each value with its monthly
-reference (seasonal WOA23 below 1500 m). Missing comparisons remain NaN; no spatial
-gap filling is applied. A third product takes the larger finite metric from the two
-references. This maximum is a sensitivity envelope, **not a calibrated confidence
-bound**. The spreads include natural variability and reference mismatch as well as
-observational uncertainty; they are not independently validated observation-error or
-forecast-uncertainty estimates.
+The analysis pools profiles from 1992 onward, comparing each value with its reference
+climatology **bilinearly interpolated in space and linearly interpolated in time**
+(between mid-months at 0–1500 m, and between mid-seasons for WOA23 below 1500 m, with
+coast/mask-aware renormalization). Missing comparisons remain NaN (`n < 1` for RMSE,
+`n < 2` for sample std); no spatial gap filling of the output spread grid is applied.
+A third product takes the larger finite metric from the two references. This maximum
+is a sensitivity envelope, **not a calibrated confidence bound**. The spreads include
+natural variability and reference mismatch as well as observational uncertainty; they
+are not independently validated observation-error or forecast-uncertainty estimates.
 
 ## Documentation and results
 
@@ -111,12 +114,15 @@ expected_{std,rmse}_from_{woa23,aotd,woa23_and_aotd}_{potential_temperature,sali
 ```
 
 Dimensions are `(depth=102, y=180, x=180)`. Variables are `Theta_std`/`Theta_rmse`
-or `S_std`/`S_rmse`, plus the associated `*_bias`, `*_n`, geographic coordinates and
+or `S_std`/`S_rmse`, plus the associated `*_bias`, `*_n` (raw comparison count),
+`*_n_eff` (distinct `(cell, UTC day)` sampling days, a de-clustered count proxy),
+`*_n_years` (distinct calendar years 1992–2023), geographic coordinates and
 EPSG:6931 CRS metadata. AOTD comparisons exist only at 0–1500 m; below that, the
 combined product equals WOA23. Its bias and count fields follow the reference
 selected for **that file's metric**; std and RMSE can select different references.
-Counts are not effective independent sample sizes, and a singleton has zero
-population std. See the [technical note](technical_note.md#3-calculation) before use.
+Raw counts `n` overstate independent sample sizes due to drifting platforms and
+synoptic sections; sample `std` uses `ddof=1` and is `NaN` when `n < 2`. See the
+[technical note](technical_note.md#3-calculation) before use.
 
 ## Repository layout and scope
 

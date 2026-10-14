@@ -18,15 +18,18 @@ scripts 05–07, not solely by the spread computation in script 03:
 The analysis describes how individual Arctic profile values differ from published
 monthly or seasonal climatologies. Differences are pooled within 100 km EASE-Grid
 2.0 North cells (EPSG:6931) and at 102 WOA standard depth levels, from 0 to 5500 m.
-There is no output time dimension. Both RMSE about the reference and population
-standard deviation about the cell's mean difference are provided.
+There is no output time dimension. Both RMSE about the reference (`n >= 1`) and
+**sample standard deviation (`ddof=1`, `n >= 2`)** about the cell's mean difference
+are provided, together with raw comparison counts (`n`), de-clustered sampling-day
+counts (`n_eff`) and distinct year counts (`n_years`).
 
 These are **empirical mismatch statistics**, not a decomposition of observation
 error or a validated predictive uncertainty model. They can inform the assessment
 of variability and reference sensitivity, but assimilation weights or forecast
-confidence bounds require further validation and a treatment of correlated errors.
-Cells without finite comparisons remain NaN; no interpolation, smoothing or filling
-of the resulting spread fields is performed.
+confidence bounds require minimum-count filtering (e.g. on `n_eff` and `n_years`),
+spatial regularization across unsampled cells, and a treatment of correlated errors.
+Cells without sufficient finite comparisons remain NaN; no interpolation, smoothing
+or filling of the resulting spread fields is performed.
 
 ## 2. Data and assumptions
 
@@ -82,62 +85,80 @@ not a proven correction or confirmed authorial convention. The first row's centr
 lies south of 60°N, while profile selection begins at 60°N.
 
 The comparison documents a marked deep-salinity disagreement between AOTD and
-WOA23 in ten months, with a contrast to March and September. This motivates
-investigation of reference sensitivity; it does not independently show which
-analysis is correct or establish the cause of the disagreement.
+WOA23 in ten months (800–1500 m area-weighted RMSE of 0.54–0.68 psu), contrasting
+sharply with March and September (0.01–0.02 psu). Where deep profiles sample those
+ten months, the AOTD deep-salinity anomaly inflates `from_aotd` and the combined
+`woa23_and_aotd` envelope.
 
-**Reference dependence:** AOTD scatter and climatology share source data. The extent
-of overlap between these profiles and WOA23 is not established here. Publication
-of a fixed reference does not guarantee statistical independence from the profiles
-used to evaluate it, and a smaller mismatch is not independent evidence of skill.
+**In-sample vs. out-of-sample reference dependence:** The published AOTD climatology
+was constructed from the 1983–2023 AOTD scatter profiles. Evaluating 1992–2023 AOTD
+scatter profiles against AOTD is therefore an **in-sample residual calculation** that
+shares input data and vertical preprocessing, whereas WOA23 (`decav91C0`, 1991–2020)
+is an independent external analysis with only partial observational overlap. Smaller
+empirical spread relative to AOTD reflects in-sample fitting and narrower smoothing
+scales rather than independently validated climatological skill.
 
 ## 3. Calculation
 
 For each selected profile and standard depth:
 
-1. **Spatial assignment.** Project longitude/latitude to EPSG:6931 and assign the
-   position to a 100 km cell in the 180 × 180 output grid. Select the containing
-   0.25° reference cell without spatial interpolation. Latitude 90° is assigned
-   to the final Arctic latitude cell; longitude is periodic.
-2. **Temporal reference.** Use the profile's calendar month through 1500 m.
-   For deeper levels, use its WOA23 calendar season. AOTD has no reference below
-   1500 m, so those comparisons are unavailable.
-3. **Potential temperature.** Convert observed and reference in situ temperature
-   separately to potential temperature referenced to 0 dbar, using the UNESCO
-   1983 algorithm in `scripts/potential_temperature.py` and pressure estimated
-   from depth and latitude. Each conversion uses its own salinity; reference
-   salinity is substituted only inside the observed-temperature conversion when
-   observed salinity is missing. It is not filled into the salinity product.
-   Thus `d_Theta = Theta_obs − Theta_ref` and `d_S = S_obs − S_ref`.
-   The test suite checks selected conversion cases against `gsw.pt_from_t`;
-   it is not an exhaustive validation of all input conditions.
-4. **Finite comparisons.** For each variable, reference, cell and depth,
-   accumulate n, Σd and Σd² across all selected years and months. Missing
-   observations or reference values do not contribute. Temperature and salinity
-   counts can therefore differ.
-5. **Statistics.** For n > 0:
+1. **Spatial assignment and bilinear reference interpolation.** Project profile
+   longitude/latitude to EPSG:6931 and assign the position to a 100 km cell in the
+   180 × 180 output grid. On the 0.25° reference grid (rows 599–719, centres
+   59.875–89.875°N; cyclic longitude centres −179.875–179.875°E), compute bilinear
+   interpolation weights over the four surrounding cell centres. Near coastlines or
+   mask boundaries, weights are renormalized over the finite corners so coastal
+   profiles are not dropped if at least one surrounding reference corner is valid.
+2. **Linear temporal reference interpolation.** From the profile's UTC timestamp,
+   compute its fractional position within the calendar year and linearly interpolate
+   between the two bracketing mid-month reference fields (levels 0–1500 m, indices
+   0–56) or bracketing WOA23 mid-season fields (levels > 1500 m, indices 57–101),
+   renormalizing weights if only one bracketing time slice is finite. Continuous
+   spatial and temporal interpolation avoids step discontinuities across 0.25° cell
+   edges and calendar-month boundaries. AOTD has no reference below 1500 m, so those
+   comparisons are unavailable (`NaN`).
+3. **Potential temperature.** Convert observed and interpolated reference in situ
+   temperature separately to potential temperature referenced to 0 dbar, using the
+   UNESCO 1983 (EOS-80) algorithm in `scripts/potential_temperature.py` and pressure
+   estimated from depth and latitude. (Note: `scripts/07_report_scatter_data.py` uses
+   TEOS-10 `gsw` Conservative Temperature and Absolute Salinity for standalone
+   water-mass screening, whereas the spread products use UNESCO 1983 potential
+   temperature $\theta$ and practical salinity $S_P$ for direct compatibility with
+   Boussinesq ocean general circulation models.) Each conversion uses its own
+   salinity; reference salinity is substituted only inside the observed-temperature
+   conversion when observed salinity is missing. It is not filled into the salinity
+   product. Thus `d_Theta = Theta_obs − Theta_ref` and `d_S = S_obs − S_ref`.
+4. **Finite comparisons and de-clustered diversity counts.** For each variable,
+   reference, 100 km cell and depth, accumulate `n`, `Σd`, `Σd²`, the number of
+   distinct `(100 km cell, UTC calendar day)` sampling days `n_eff`, and the number
+   of distinct calendar years `n_years` across 1992–2023. Missing observations or
+   reference values do not contribute.
+5. **Statistics.** For each cell and depth:
 
    ```text
-   bias = Σd / n
-   RMSE = sqrt(Σd² / n)
-   std  = sqrt(max(Σd² / n − bias², 0))
+   bias = Σd / n                                          (for n >= 1; NaN for n = 0)
+   RMSE = sqrt(Σd² / n)                                   (for n >= 1; NaN for n = 0)
+   std  = sqrt((n / (n − 1)) * max(Σd² / n − bias², 0))   (for n >= 2; NaN for n < 2)
    ```
 
-   `std` is the population form (denominator n, not n − 1); it is zero for n = 1.
-   The non-negative clamp protects against negative round-off variance.
-   Where n = 0, the metric and bias are NaN. No minimum n is imposed.
+   `std` is the **sample standard deviation (`ddof=1`)**; singletons (`n = 1`) are
+   assigned `NaN` rather than zero so they cannot cause zero-variance division errors
+   in downstream weighting. The non-negative clamp protects against floating-point
+   round-off when all values in a cell are identical.
 6. **Reference-sensitivity envelope.** The combined product takes a NaN-ignoring
    elementwise maximum of the two reference-based **metrics**. With one finite
    reference it uses that reference; with neither, it is NaN. Below 1500 m it
-   equals WOA23. Associated bias and n follow the winning reference separately
-   for std and RMSE. Winners are selected at the stored float32 metric precision;
-   a finite tie selects WOA23. Bias and n may therefore differ between the
-   combined std and RMSE files.
+   equals WOA23. Associated `bias`, `n`, `n_eff` and `n_years` follow the winning
+   reference separately for `std` and `RMSE`. Winners are selected at the stored
+   float32 metric precision; a finite tie selects WOA23. Because `std` requires
+   `n >= 2` while `RMSE` requires `n >= 1`, and because the two metrics can select
+   different references, `bias` and count fields may differ between the combined
+   `std` and `RMSE` files.
 
-For a single reference and sample set, `RMSE² = std² + bias²`. The combined
-maximum does not generally satisfy that identity across its separate files,
-because its std and RMSE can come from different references and samples. A
-combined RMSE/std curve is a quotient of envelope metrics, not necessarily a
+For a single reference and sample set with `n >= 2`, `RMSE² = ((n − 1) / n) · std² + bias²`.
+The combined maximum does not generally satisfy that identity across its separate
+files, because its `std` and `RMSE` can come from different references and samples.
+A combined `RMSE/std` curve is a quotient of envelope metrics, not necessarily a
 single sample's bias decomposition. The maximum is **not** a calibrated confidence
 bound, even though it is at least as large as each available constituent metric
 at the same cell and depth.
@@ -151,9 +172,10 @@ expected_{std,rmse}_from_{woa23,aotd,woa23_and_aotd}_{potential_temperature,sali
 ```
 
 Dimensions: `(depth=102, y=180, x=180)`. Variables: `Theta_std`/`Theta_rmse` (°C)
-or `S_std`/`S_rmse` (practical-salinity difference), the associated `*_bias` and
-`*_n`, 2-D `lat`/`lon`, and EPSG:6931 CRS metadata. Practical salinity is
-conventionally labelled psu in reports.
+or `S_std`/`S_rmse` (practical-salinity difference), the associated `*_bias`,
+`*_n` (raw comparison count), `*_n_eff` (distinct `(cell, UTC day)` count),
+`*_n_years` (distinct calendar years), 2-D `lat`/`lon`, and EPSG:6931 CRS metadata.
+Practical salinity is conventionally labelled psu in reports.
 
 ```python
 import xarray as xr
@@ -165,20 +187,22 @@ with xr.open_dataset(path) as ds:
 
 ## 4. Results and summary conventions
 
-The following compact summary uses **each product's own finite-cell mask**.
-Cells receive equal weight, irrespective of their comparison counts. Numbers
-are rounded; the [spread report](reports/expected_spread/expected_spread_report.md)
+The following compact summary uses **each product's own finite-cell mask** (`n >= 1`
+for RMSE, `n >= 2` for sample std). Cells receive equal weight, irrespective of their
+comparison counts. Numbers are rounded; the
+[spread report](reports/expected_spread/expected_spread_report.md)
 and [level-statistics CSV](reports/expected_spread/tables/level_statistics.csv)
 provide fuller results. Product masks differ, so differences between these
 medians are not paired estimates of reference improvement.
 
 | metric | depths (m) | WOA23 | AOTD | combined maximum |
 |---|---|---|---|---|
-| Theta RMSE (°C) | 10 / 100 / 1500 | 0.839 / 0.511 / 0.0756 | 0.756 / 0.430 / 0.0503 | 0.916 / 0.525 / 0.0773 |
-| Theta std (°C) | 10 / 100 / 1500 | 0.712 / 0.432 / 0.0471 | 0.688 / 0.396 / 0.0413 | 0.754 / 0.450 / 0.0501 |
-| S RMSE (psu) | 10 / 100 / 1500 | 0.597 / 0.135 / 0.00779 | 0.433 / 0.103 / 0.00566 | 0.639 / 0.144 / 0.00812 |
-| S std (psu) | 10 / 100 / 1500 | 0.436 / 0.107 / 0.00592 | 0.355 / 0.0909 / 0.00484 | 0.468 / 0.112 / 0.00599 |
-| finite Theta RMSE cells | 10 / 100 / 1500 | 1666 / 1379 / 579 | 1672 / 1366 / 572 | 1684 / 1388 / 583 |
+| Theta RMSE (°C) | 10 / 100 / 1500 | 0.819 / 0.504 / 0.0740 | 0.765 / 0.442 / 0.0499 | 0.899 / 0.522 / 0.0759 |
+| Theta std (°C) | 10 / 100 / 1500 | 0.709 / 0.462 / 0.0585 | 0.700 / 0.418 / 0.0524 | 0.773 / 0.473 / 0.0607 |
+| S RMSE (psu) | 10 / 100 / 1500 | 0.596 / 0.141 / 0.00880 | 0.463 / 0.109 / 0.00579 | 0.658 / 0.146 / 0.00910 |
+| S std (psu) | 10 / 100 / 1500 | 0.448 / 0.112 / 0.00760 | 0.388 / 0.0988 / 0.00606 | 0.484 / 0.117 / 0.00765 |
+| finite Theta RMSE cells (`n >= 1`) | 10 / 100 / 1500 | 1694 / 1393 / 587 | 1703 / 1390 / 586 | 1707 / 1403 / 591 |
+| finite Theta std cells (`n >= 2`) | 10 / 100 / 1500 | 1608 / 1334 / 524 | 1615 / 1334 / 524 | 1618 / 1340 / 527 |
 
 The finite-cell medians decrease with depth in this summary, but depth-dependent
 sampling masks and sparse deep cells must be considered. Spatial patterns are
@@ -193,22 +217,27 @@ confidence intervals for a mean or future observation.
 * **Mixed contributions.** Mismatch combines observational uncertainty, unresolved
   variability, sampling differences, interannual changes, trends and reference
   limitations. None is separately estimated here.
-* **Pooled timing.** Comparing against the correct month or season removes part
-  of the climatological cycle, not all seasonal or synoptic variability. Years
-  from 1992–2023 are pooled against references with different period definitions.
-* **Sparse and correlated sampling.** Small-n statistics can be unstable, and
-  zero singleton std does not imply a quiet ocean. Repeated profiles can share
-  substantial information. Counts should not be used as effective sample sizes.
+* **Pooled timing.** Linearly interpolating between monthly or seasonal reference
+  fields removes smooth climatological phase progression, not synoptic, mesoscale
+  or interannual variability. Years from 1992–2023 are pooled against references
+  with different period definitions (1991–2020 for WOA23; 1983–2023 for AOTD).
+* **Sparse and correlated sampling.** Small-`n` statistics are noisy; singleton
+  cells (`n = 1`) are masked (`NaN`) in `std`, and repeated profiles along Ice-Tethered
+  Profiler drifts or shipboard sections share substantial information. Downstream
+  applications should filter on `n_eff` (distinct sampling days) and `n_years`
+  (distinct years) rather than raw count `n`.
 * **Mean offset is not established error.** A nonzero bias field describes these
   observations relative to a reference; it can reflect period, sampling or
   representation differences rather than a uniquely attributable analysis error.
-* **Grid and mask sensitivity.** Cell lookup is discrete, AOTD alignment is assumed,
-  and reference masks can admit different observations even within a shared 100 km
-  output cell. Comparing product medians alone is not a controlled skill comparison.
+* **Grid and mask sensitivity.** AOTD grid alignment is assumed, ten AOTD months
+  exhibit a severe 800–1500 m salinity anomaly, and reference masks can admit
+  different observations near coastlines. Comparing product medians alone is not
+  a controlled skill comparison.
 * **No independent uncertainty calibration.** The pooled statistics and combined
   maximum have not been validated as assimilation-error covariances or forecast
-  confidence bounds. Users should consider minimum counts, representativeness and
-  out-of-sample evaluation for their application.
+  confidence bounds. Users should apply minimum `n_eff` / `n_years` thresholds,
+  spatial regularization across unsampled (`NaN`) cells, and out-of-sample evaluation
+  for their application.
 
 ## References
 

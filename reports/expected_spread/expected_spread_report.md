@@ -14,22 +14,23 @@ and pools years and months; there is no time dimension in the output.
 Temperature differences use surface-referenced potential temperature (Theta);
 salinity differences use practical salinity (S; conventionally reported here as psu).
 
-* **RMSE** = √mean(d²): mismatch relative to the reference, including the mean offset.
-* **std** = √mean((d − mean(d))²): population standard deviation after removing the offset.
+* **RMSE** = √mean(d²): mismatch relative to the reference, including the mean offset (defined when `n >= 1`).
+* **std** = √(n / (n − 1) · mean((d − mean(d))²)): **sample** standard deviation (`ddof=1`) after removing the cell's mean offset. It is `NaN` when `n < 2`, preventing zero-variance artifacts in singleton cells.
 * **bias** = mean(d), where d = observation − reference. This is a sample mean offset,
   not an independently established climatology error.
-* **n** counts finite differences at a cell and depth, not independent observations.
-  No minimum count is imposed; std is zero when n = 1.
+* **n** counts finite differences at a cell and depth, **n_eff** counts distinct `(100 km cell, UTC calendar day)` sampling days with valid differences (a de-clustered count proxy), and **n_years** counts distinct calendar years (1992–2023) represented in the cell.
 
-The `woa23` product uses the profile's calendar month at 0–1500 m and calendar season
-below 1500 m. The `aotd` product uses the published monthly AOTD climatology at
-0–1500 m only. `woa23_and_aotd` takes the larger finite metric at each cell and level;
+The `woa23` product uses the WOA23 0.25° monthly climatology at 0–1500 m and seasonal
+climatology below 1500 m, **bilinearly interpolated in space and linearly interpolated in time**
+(between mid-months or mid-seasons, with coast/mask-aware weight renormalization over finite corners).
+The `aotd` product uses the published monthly AOTD climatology at 0–1500 m only, interpolated identically.
+`woa23_and_aotd` takes the larger finite metric at each cell and level;
 when only one reference is available it uses that reference. Below 1500 m it therefore
-equals the WOA23 product. Its bias and n follow the selected reference **separately for
+equals the WOA23 product. Its `bias`, `n`, `n_eff` and `n_years` follow the selected reference **separately for
 std and RMSE**, so the two combined files may have different bias and count fields.
 
-A metric is NaN when no finite comparison is available, including when the reference
-is missing. No spatial filling is applied. These empirical summaries are neither pure
+A metric is NaN when insufficient finite comparisons are available (`n < 1` for RMSE, `n < 2` for sample std), including when the reference
+is missing. No spatial filling of the output spread grid is applied. These empirical summaries are neither pure
 observation-error estimates nor validated forecast uncertainties. The combined maximum
 is a reference-sensitivity envelope, not a calibrated confidence bound.
 
@@ -52,57 +53,57 @@ percentile range, not a confidence interval. Counts for all three masks are show
 
 | depth (m) | woa23 median [P10–P90] | aotd median [P10–P90] | woa23_and_aotd median [P10–P90] | valid cells: WOA23 / AOTD / combined |
 |---|---|---|---|---|
-| 10 | 0.839 [0.051–1.7] | 0.756 [0.034–1.6] | 0.916 [0.058–1.9] | 1666 / 1672 / 1684 |
-| 50 | 0.597 [0.067–1.4] | 0.506 [0.047–1.2] | 0.623 [0.08–1.4] | 1489 / 1481 / 1501 |
-| 100 | 0.511 [0.091–1.2] | 0.43 [0.059–1.1] | 0.525 [0.1–1.3] | 1379 / 1366 / 1388 |
-| 200 | 0.485 [0.11–1] | 0.394 [0.081–0.93] | 0.498 [0.13–1.1] | 1235 / 1226 / 1247 |
-| 500 | 0.221 [0.053–0.85] | 0.151 [0.035–0.8] | 0.231 [0.058–0.91] | 907 / 904 / 913 |
-| 1000 | 0.134 [0.022–0.31] | 0.096 [0.014–0.25] | 0.135 [0.027–0.31] | 664 / 661 / 668 |
-| 1500 | 0.0756 [0.011–0.17] | 0.0503 [0.0057–0.13] | 0.0773 [0.014–0.17] | 579 / 572 / 583 |
-| 2500 | 0.0286 [0.0029–0.13] | – | 0.0286 [0.0029–0.13] | 337 / 0 / 337 |
-| 4000 | 0.0106 [0.0028–0.031] | – | 0.0106 [0.0028–0.031] | 35 / 0 / 35 |
+| 10 | 0.819 [0.048–1.8] | 0.765 [0.038–1.7] | 0.899 [0.058–1.9] | 1694 / 1703 / 1707 |
+| 50 | 0.592 [0.068–1.4] | 0.515 [0.051–1.2] | 0.614 [0.083–1.4] | 1508 / 1511 / 1520 |
+| 100 | 0.504 [0.097–1.2] | 0.442 [0.063–1.1] | 0.522 [0.11–1.3] | 1393 / 1390 / 1403 |
+| 200 | 0.483 [0.12–1] | 0.407 [0.088–0.95] | 0.498 [0.13–1.1] | 1256 / 1256 / 1269 |
+| 500 | 0.214 [0.051–0.89] | 0.162 [0.037–0.83] | 0.223 [0.056–0.91] | 925 / 923 / 927 |
+| 1000 | 0.133 [0.024–0.31] | 0.101 [0.017–0.28] | 0.136 [0.029–0.32] | 673 / 668 / 673 |
+| 1500 | 0.074 [0.013–0.17] | 0.0499 [0.0075–0.14] | 0.0759 [0.015–0.17] | 587 / 586 / 591 |
+| 2500 | 0.0327 [0.0034–0.13] | – | 0.0327 [0.0034–0.13] | 347 / 0 / 347 |
+| 4000 | 0.011 [0.0022–0.033] | – | 0.011 [0.0022–0.033] | 38 / 0 / 38 |
 
 ### Theta std (°C)
 
 | depth (m) | woa23 median [P10–P90] | aotd median [P10–P90] | woa23_and_aotd median [P10–P90] | valid cells: WOA23 / AOTD / combined |
 |---|---|---|---|---|
-| 10 | 0.712 [0.021–1.5] | 0.688 [0.016–1.5] | 0.754 [0.026–1.6] | 1666 / 1672 / 1684 |
-| 50 | 0.506 [0.039–1.2] | 0.458 [0.032–1.1] | 0.525 [0.042–1.2] | 1489 / 1481 / 1501 |
-| 100 | 0.432 [0.043–1.1] | 0.396 [0.038–0.97] | 0.45 [0.049–1.1] | 1379 / 1366 / 1388 |
-| 200 | 0.403 [0.061–0.93] | 0.347 [0.056–0.83] | 0.412 [0.067–0.94] | 1235 / 1226 / 1247 |
-| 500 | 0.161 [0.028–0.78] | 0.126 [0.024–0.73] | 0.163 [0.035–0.8] | 907 / 904 / 913 |
-| 1000 | 0.099 [0.0038–0.26] | 0.0829 [0.0026–0.24] | 0.103 [0.0062–0.26] | 664 / 661 / 668 |
-| 1500 | 0.0471 [0–0.14] | 0.0413 [0–0.13] | 0.0501 [0–0.14] | 579 / 572 / 583 |
-| 2500 | 0.00859 [0–0.087] | – | 0.00859 [0–0.087] | 337 / 0 / 337 |
-| 4000 | 0.000586 [0–0.0094] | – | 0.000586 [0–0.0094] | 35 / 0 / 35 |
+| 10 | 0.709 [0.036–1.5] | 0.7 [0.03–1.5] | 0.773 [0.04–1.6] | 1608 / 1615 / 1618 |
+| 50 | 0.524 [0.052–1.3] | 0.488 [0.047–1.2] | 0.538 [0.058–1.3] | 1435 / 1437 / 1443 |
+| 100 | 0.462 [0.067–1.1] | 0.418 [0.052–1] | 0.473 [0.074–1.1] | 1334 / 1334 / 1340 |
+| 200 | 0.425 [0.085–0.94] | 0.372 [0.075–0.87] | 0.434 [0.092–0.95] | 1201 / 1208 / 1213 |
+| 500 | 0.163 [0.035–0.79] | 0.138 [0.033–0.75] | 0.171 [0.039–0.8] | 895 / 893 / 895 |
+| 1000 | 0.115 [0.019–0.28] | 0.0998 [0.016–0.27] | 0.116 [0.021–0.29] | 623 / 621 / 623 |
+| 1500 | 0.0585 [0.0084–0.15] | 0.0524 [0.0054–0.14] | 0.0607 [0.0091–0.15] | 524 / 524 / 527 |
+| 2500 | 0.022 [0.0019–0.1] | – | 0.022 [0.0019–0.1] | 286 / 0 / 286 |
+| 4000 | 0.0032 [0.00018–0.016] | – | 0.0032 [0.00018–0.016] | 22 / 0 / 22 |
 
 ### S RMSE (psu)
 
 | depth (m) | woa23 median [P10–P90] | aotd median [P10–P90] | woa23_and_aotd median [P10–P90] | valid cells: WOA23 / AOTD / combined |
 |---|---|---|---|---|
-| 10 | 0.597 [0.11–1.9] | 0.433 [0.089–1.2] | 0.639 [0.11–2] | 1666 / 1672 / 1684 |
-| 50 | 0.268 [0.078–0.75] | 0.193 [0.063–0.49] | 0.285 [0.083–0.79] | 1489 / 1481 / 1501 |
-| 100 | 0.135 [0.059–0.46] | 0.103 [0.046–0.32] | 0.144 [0.061–0.48] | 1379 / 1366 / 1388 |
-| 200 | 0.0793 [0.03–0.35] | 0.0636 [0.025–0.24] | 0.0822 [0.034–0.36] | 1235 / 1226 / 1247 |
-| 500 | 0.022 [0.0045–0.066] | 0.0159 [0.0032–0.057] | 0.0229 [0.0046–0.069] | 907 / 904 / 913 |
-| 1000 | 0.0117 [0.0035–0.039] | 0.00873 [0.0016–0.03] | 0.012 [0.0041–0.039] | 664 / 661 / 668 |
-| 1500 | 0.00779 [0.0023–0.027] | 0.00566 [0.0011–0.023] | 0.00812 [0.0026–0.028] | 579 / 572 / 583 |
-| 2500 | 0.00434 [0.0012–0.021] | – | 0.00434 [0.0012–0.021] | 337 / 0 / 337 |
-| 4000 | 0.00179 [0.0004–0.0082] | – | 0.00179 [0.0004–0.0082] | 35 / 0 / 35 |
+| 10 | 0.596 [0.11–1.9] | 0.463 [0.097–1.3] | 0.658 [0.12–2] | 1694 / 1703 / 1707 |
+| 50 | 0.269 [0.079–0.75] | 0.205 [0.068–0.51] | 0.291 [0.083–0.79] | 1508 / 1511 / 1520 |
+| 100 | 0.141 [0.059–0.46] | 0.109 [0.05–0.33] | 0.146 [0.061–0.48] | 1393 / 1390 / 1403 |
+| 200 | 0.0796 [0.031–0.34] | 0.0664 [0.027–0.25] | 0.0838 [0.034–0.36] | 1256 / 1256 / 1269 |
+| 500 | 0.0222 [0.0048–0.068] | 0.0177 [0.0035–0.06] | 0.0231 [0.0049–0.069] | 925 / 923 / 927 |
+| 1000 | 0.0118 [0.0038–0.038] | 0.00903 [0.0027–0.031] | 0.012 [0.0043–0.038] | 673 / 668 / 673 |
+| 1500 | 0.0088 [0.0028–0.029] | 0.00579 [0.0016–0.023] | 0.0091 [0.0035–0.029] | 587 / 586 / 591 |
+| 2500 | 0.00489 [0.0014–0.029] | – | 0.00489 [0.0014–0.029] | 347 / 0 / 347 |
+| 4000 | 0.00251 [0.00067–0.0086] | – | 0.00251 [0.00067–0.0086] | 38 / 0 / 38 |
 
 ### S std (psu)
 
 | depth (m) | woa23 median [P10–P90] | aotd median [P10–P90] | woa23_and_aotd median [P10–P90] | valid cells: WOA23 / AOTD / combined |
 |---|---|---|---|---|
-| 10 | 0.436 [0.077–1.3] | 0.355 [0.068–1] | 0.468 [0.079–1.4] | 1666 / 1672 / 1684 |
-| 50 | 0.199 [0.06–0.52] | 0.165 [0.05–0.43] | 0.212 [0.064–0.53] | 1489 / 1481 / 1501 |
-| 100 | 0.107 [0.044–0.31] | 0.0909 [0.039–0.27] | 0.112 [0.048–0.32] | 1379 / 1366 / 1388 |
-| 200 | 0.0666 [0.02–0.26] | 0.057 [0.018–0.2] | 0.068 [0.022–0.26] | 1235 / 1226 / 1247 |
-| 500 | 0.0167 [0.0029–0.059] | 0.014 [0.0021–0.054] | 0.0174 [0.0033–0.06] | 907 / 904 / 913 |
-| 1000 | 0.00975 [0.00051–0.033] | 0.00769 [0.0004–0.028] | 0.00992 [0.0011–0.033] | 664 / 661 / 668 |
-| 1500 | 0.00592 [0–0.024] | 0.00484 [0–0.022] | 0.00599 [0–0.025] | 579 / 572 / 583 |
-| 2500 | 0.00234 [0–0.01] | – | 0.00234 [0–0.01] | 337 / 0 / 337 |
-| 4000 | 0.00056 [0–0.0046] | – | 0.00056 [0–0.0046] | 35 / 0 / 35 |
+| 10 | 0.448 [0.094–1.3] | 0.388 [0.087–1.1] | 0.484 [0.099–1.4] | 1608 / 1615 / 1618 |
+| 50 | 0.218 [0.073–0.54] | 0.179 [0.065–0.44] | 0.225 [0.075–0.55] | 1435 / 1437 / 1443 |
+| 100 | 0.112 [0.052–0.32] | 0.0988 [0.046–0.28] | 0.117 [0.055–0.33] | 1334 / 1334 / 1340 |
+| 200 | 0.0688 [0.025–0.26] | 0.061 [0.022–0.22] | 0.0701 [0.027–0.26] | 1201 / 1208 / 1213 |
+| 500 | 0.0185 [0.0038–0.061] | 0.0159 [0.0029–0.055] | 0.0189 [0.0039–0.062] | 895 / 893 / 895 |
+| 1000 | 0.011 [0.003–0.034] | 0.00907 [0.0021–0.03] | 0.0111 [0.0034–0.035] | 623 / 621 / 623 |
+| 1500 | 0.0076 [0.0019–0.026] | 0.00606 [0.0013–0.024] | 0.00765 [0.002–0.027] | 524 / 524 / 527 |
+| 2500 | 0.00401 [0.00086–0.022] | – | 0.00401 [0.00086–0.022] | 286 / 0 / 286 |
+| 4000 | 0.00205 [0.00066–0.0061] | – | 0.00205 [0.00066–0.0061] | 22 / 0 / 22 |
 
 ## 3. Spatial distributions
 
@@ -126,58 +127,63 @@ responsible for it.
 
 | depth (m) | Theta bias median (°C) | Theta bias P10–P90 | S bias median (psu) | S bias P10–P90 |
 |---|---|---|---|---|
-| 10 | 0.00775 | -0.62 … 0.56 | -0.0264 | -0.88 … 0.42 |
-| 50 | 0.0297 | -0.35 … 0.47 | -0.0107 | -0.44 … 0.19 |
-| 100 | 0.0369 | -0.32 … 0.39 | -0.00953 | -0.22 … 0.097 |
-| 200 | 0.0213 | -0.29 … 0.34 | -0.00609 | -0.14 … 0.057 |
-| 500 | 0.0259 | -0.15 … 0.23 | -0.00112 | -0.024 … 0.011 |
-| 1000 | 0.0331 | -0.059 … 0.13 | -0.000285 | -0.013 … 0.0064 |
-| 1500 | 0.03 | -0.0089 … 0.096 | -0.000248 | -0.0089 … 0.0076 |
-| 2500 | 0.00243 | -0.023 … 0.083 | -0.000889 | -0.0065 … 0.0045 |
-| 4000 | -0.00251 | -0.014 … 0.031 | -0.000238 | -0.0061 … 0.0025 |
+| 10 | 0.0064 | -0.64 … 0.6 | -0.0319 | -0.97 … 0.45 |
+| 50 | 0.0244 | -0.36 … 0.5 | -0.0127 | -0.45 … 0.19 |
+| 100 | 0.0392 | -0.35 … 0.39 | -0.0113 | -0.24 … 0.089 |
+| 200 | 0.0212 | -0.31 … 0.34 | -0.00585 | -0.16 … 0.059 |
+| 500 | 0.0282 | -0.16 … 0.26 | -0.00149 | -0.024 … 0.01 |
+| 1000 | 0.0324 | -0.067 … 0.13 | -0.000284 | -0.014 … 0.0068 |
+| 1500 | 0.0312 | -0.011 … 0.096 | -0.00054 | -0.014 … 0.0077 |
+| 2500 | 0.0034 | -0.024 … 0.09 | -0.00144 | -0.0098 … 0.0039 |
+| 4000 | -0.00164 | -0.015 … 0.033 | -0.000869 | -0.0071 … 0.0025 |
 
 **Figure 4. AOTD-based RMSE minus WOA23-based RMSE where both metrics exist.** Blue denotes a smaller empirical AOTD-based RMSE, not independent validation of AOTD. Even within a shared output cell, the contributing observations can differ because the reference masks differ.
 
 ![product_difference_maps.png](figures/product_difference_maps.png)
 
-## 5. Available comparisons
+## 5. Available comparisons and effective sampling diversity
 
-**Figure 5. WOA23-based potential-temperature comparison counts versus depth.** Panels show total finite differences, cells with data, and sparse-cell percentages conditional on n > 0. These counts need not describe salinity or the other products.
+**Figure 5. WOA23-based potential-temperature comparison counts versus depth.** Panels show total finite differences (`n`) and distinct sampling days (`n_eff`), cells with data (`n >= 1` and `n >= 2`), and sparse-cell percentages conditional on `n > 0`. These counts need not describe salinity or the other products.
 
 ![counts_vs_depth.png](figures/counts_vs_depth.png)
 
-| depth (m) | values used | cells with data | % of valid cells with n < 5 | % with n < 30 |
-|---|---|---|---|---|
-| 10 | 306,331 | 1666 | 14.3 | 39 |
-| 50 | 278,124 | 1489 | 11.8 | 34.7 |
-| 100 | 256,455 | 1379 | 12.2 | 33.3 |
-| 200 | 210,761 | 1235 | 10.4 | 32 |
-| 500 | 148,954 | 907 | 8.6 | 31.3 |
-| 1000 | 54,635 | 664 | 23 | 55 |
-| 1500 | 37,597 | 579 | 30.9 | 60.1 |
-| 2500 | 3,937 | 337 | 49 | 91.7 |
-| 4000 | 98 | 35 | 77.1 | 100 |
+| depth (m) | values used (`n`) | sampling days (`n_eff`) | median years (`n_years`) | cells with `n >= 1` (`n >= 2`) | % of valid cells with `n < 5` | % with `n_eff < 5` |
+|---|---|---|---|---|---|---|
+| 10 | 324,151 | 139,625 | 6 | 1694 (1608) | 14.3 | 20.5 |
+| 50 | 288,300 | 136,342 | 7 | 1508 (1435) | 11.9 | 16.6 |
+| 100 | 262,786 | 129,095 | 8 | 1393 (1334) | 11.3 | 15.9 |
+| 200 | 214,638 | 114,719 | 8 | 1256 (1201) | 10.8 | 14.2 |
+| 500 | 150,769 | 88,117 | 8 | 925 (895) | 8.86 | 11.9 |
+| 1000 | 55,581 | 47,641 | 8 | 673 (623) | 22.1 | 30.3 |
+| 1500 | 38,262 | 33,940 | 6 | 587 (524) | 30 | 38.3 |
+| 2500 | 4,116 | 2,643 | 2 | 347 (286) | 48.4 | 61.1 |
+| 4000 | 108 | 71 | 1 | 38 (22) | 78.9 | 94.7 |
 
-Sparse cells have poorly constrained statistics; a singleton's zero std does not imply
-zero physical variability. Repeated measurements along tracks or sections can be
-correlated, so larger n does not guarantee proportionally more independent information.
+Sparse cells have poorly constrained statistics; singletons (`n = 1`) are excluded (`NaN`) from
+sample standard deviation (`std`) so they cannot produce artificial zero-variance weights.
+Because drifting Ice-Tethered Profilers and hydrographic sections take repeated measurements
+within the same grid cell, raw count `n` overstates independent sample size; `n_eff` (distinct
+sampling days) and `n_years` (distinct calendar years) provide practical de-clustering diagnostics.
 
 ## 6. Interpretation and limitations
 
 * Mismatch combines observational uncertainty, unresolved spatial and temporal
   variability, interannual change, trends, and reference limitations. This analysis
   does not identify their individual contributions.
-* For a single reference and the same samples, RMSE² = std² + bias². This identity
-  need not hold across the separately selected combined std and RMSE products.
-* AOTD scatter and climatology share source data; the extent of overlap with WOA23
-  is not established here. Smaller mismatch is not an out-of-sample skill estimate.
-* Reference lookup uses a 0.25° cell without spatial or temporal interpolation.
-  AOTD is mapped to WOA23 centres under an adopted grid-alignment assumption.
+* For a single reference and the same samples with `n >= 2`, `RMSE² = ((n − 1) / n) · std² + bias²`.
+  This identity need not hold across the separately selected combined `std` and `RMSE` products.
+* AOTD scatter and climatology share 1983–2023 source data, making `from_aotd` an **in-sample**
+  residual calculation; the extent of overlap with WOA23 is not established here. Smaller mismatch
+  relative to AOTD reflects in-sample fitting and shared processing rather than out-of-sample skill.
+* Reference values are bilinearly interpolated in space and linearly interpolated between mid-months
+  (or mid-seasons below 1500 m) with mask-aware renormalization near coasts. AOTD is mapped to WOA23
+  centres under an adopted grid-alignment assumption.
 * The [climatology comparison](../woa_compare/woa_compare_report.md) documents a
-  marked deep-salinity disagreement in ten AOTD months. It warrants investigation
-  but does not independently establish which reference is correct.
-* Applying these pooled spreads to assimilation or prediction requires additional
-  validation, sampling safeguards and a treatment of correlated errors.
+  marked deep-salinity anomaly (800–1500 m) in ten AOTD months, which inflates `from_aotd` and
+  `woa23_and_aotd` salinity spread where deep profiles sample those months.
+* Applying these pooled spreads to assimilation or prediction requires minimum-count filtering
+  (e.g., on `n_eff` and `n_years`), spatial regularization where cells are `NaN`, and a treatment
+  of correlated errors.
 
 ## 7. Data and provenance
 
@@ -188,8 +194,8 @@ reference's bias. The figures are generated by `scripts/04_make_plots.py`.
 
 NetCDF products follow
 `expected_{std,rmse}_from_{woa23,aotd,woa23_and_aotd}_{potential_temperature,salinity}_ease2_100km.nc`
-in `outputs/expected_spread/` (12 files). Each contains the metric, bias, n, coordinates
-and CRS metadata; regenerate them with `scripts/03_compute_expected_spread.py`.
+in `outputs/expected_spread/` (12 files). Each contains the metric, `*_bias`, `*_n`, `*_n_eff`,
+`*_n_years`, coordinates and CRS metadata; regenerate them with `scripts/03_compute_expected_spread.py`.
 
 Source credit: Li, J., Wu, X. & Wang, X. (2025), *An Arctic Ocean Thermohaline Dataset*,
 [doi:10.1038/s41597-025-05855-3](https://doi.org/10.1038/s41597-025-05855-3);

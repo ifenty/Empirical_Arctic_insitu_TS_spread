@@ -17,10 +17,12 @@ Practical salinity (S) is conventionally labelled psu.
   57 levels from 0 to 1500 m, reference period 1991–2020.
 * AOTD: published monthly fields for the dataset spanning 1983–2023.
 * Each monthly statistic uses cells finite in **both** fields at the selected depth.
-  Cells have equal weight; no area weighting is applied on this latitude–longitude
-  grid. Masks may differ between months, variables and depths.
-* RMSE = √mean((AOTD − WOA23)²); offset (`bias` in the CSV) = mean(AOTD − WOA23).
-  Correlation is spatial Pearson correlation on the same finite-cell intersection.
+  Because 0.25° latitude–longitude cells converge toward the pole, primary summary
+  statistics (`rmse`, `bias`, `corr`) weight each cell by **cos(latitude)**; unweighted
+  grid-index means (`rmse_unweighted`, `bias_unweighted`) are also recorded in the CSV.
+  Masks may differ between months, variables and depths.
+* Area-weighted RMSE = √(Σ w(AOTD − WOA23)² / Σ w); area-weighted offset (`bias` in the CSV) = Σ w(AOTD − WOA23) / Σ w, with w = cos(lat).
+  Correlation is the cos(lat)-weighted spatial Pearson correlation on the same finite-cell intersection.
   Statistics require more than ten shared cells. These summaries are not sampling
   confidence intervals.
 
@@ -60,16 +62,16 @@ T quantities are in °C; S quantities are in psu.
 
 | depth (m) | T RMSE Mar/Sep | T RMSE other 10 | T offset other 10 | S RMSE Mar/Sep | S RMSE other 10 |
 |---|---|---|---|---|---|
-| 0 | 1.00 | 1.59 | +0.59 | 1.76 | 1.70 |
-| 10 | 0.86 | 1.34 | +0.52 | 1.33 | 1.26 |
-| 50 | 0.59 | 0.64 | +0.10 | 0.52 | 0.52 |
-| 100 | 0.68 | 0.56 | +0.03 | 0.28 | 0.26 |
-| 300 | 0.41 | 0.39 | +0.06 | 0.06 | 0.13 |
-| 500 | 0.25 | 0.25 | +0.03 | 0.03 | 0.03 |
-| 750 | 0.14 | 0.14 | +0.01 | 0.02 | 0.02 |
-| 800 | 0.14 | 0.14 | +0.01 | 0.02 | 0.49 |
-| 1000 | 0.11 | 0.11 | +0.01 | 0.02 | 0.61 |
-| 1500 | 0.05 | 0.07 | +0.02 | 0.01 | 0.63 |
+| 0 | 1.32 | 2.11 | +1.01 | 2.04 | 1.86 |
+| 10 | 1.18 | 1.83 | +0.87 | 1.48 | 1.39 |
+| 50 | 0.75 | 0.78 | +0.15 | 0.56 | 0.50 |
+| 100 | 0.74 | 0.64 | +0.00 | 0.32 | 0.27 |
+| 300 | 0.48 | 0.46 | +0.02 | 0.07 | 0.19 |
+| 500 | 0.32 | 0.34 | +0.02 | 0.03 | 0.03 |
+| 750 | 0.20 | 0.20 | +0.03 | 0.02 | 0.02 |
+| 800 | 0.19 | 0.19 | +0.02 | 0.02 | 0.54 |
+| 1000 | 0.13 | 0.14 | +0.02 | 0.02 | 0.66 |
+| 1500 | 0.06 | 0.08 | +0.03 | 0.01 | 0.68 |
 
 The unrounded values, per-field counts (`n_aotd`, `n_woa`) and intersection counts
 (`n_both`) are in [the level-statistics CSV](tables/level_stats.csv).

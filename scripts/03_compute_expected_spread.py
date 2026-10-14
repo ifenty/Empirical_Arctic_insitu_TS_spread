@@ -1,17 +1,21 @@
-"""Expected standard deviation and expected RMSE of in situ potential temperature (theta) and salinity (S), on the EASE2 100 km grid.
+"""Expected sample standard deviation and expected RMSE of in situ potential temperature (theta) and salinity (S), on the EASE2 100 km grid.
 
 For every in situ profile value (scatter data, 1992 onwards) the deviation d = obs - reference is formed at the profile's location
-(nearest WOA23 0.25 deg cell). Both the observation and the reference are converted to potential temperature (UNESCO 1983, surface
-reference, scripts/potential_temperature.py) BEFORE differencing: d_theta = theta(T_obs, S_obs) - theta(T_ref, S_ref). WOA23 t_an, the scatter
-T and the published AOTD T are all treated as in situ. Where S_obs is missing but T_obs is valid, S_ref is used transiently for theta(T_obs).
+and timestamp using bilinear spatial and linear temporal interpolation of the 0.25 deg reference climatology (with coast/mask-aware
+weight renormalization over finite corner/month values). Both the observation and the reference are converted to potential temperature
+(UNESCO 1983, surface reference, scripts/potential_temperature.py) BEFORE differencing: d_theta = theta(T_obs, S_obs) - theta(T_ref, S_ref).
+WOA23 t_an, the scatter T and the published AOTD T are all treated as in situ. Where S_obs is missing but T_obs is valid, S_ref is used
+transiently for theta(T_obs).
 References (one product each):
-    woa23           WOA23 decav91C0 monthly (0-1500 m) or seasonal (deeper) field of the profile month/season
+    woa23           WOA23 decav91C0 monthly (0-1500 m) or seasonal (deeper) field interpolated to profile location and time
     aotd            published AOTD monthly climatology (0-1500 m, treated as the WOA23 0.25 deg grid, rows 599-719); NaN deeper
     woa23_and_aotd  elementwise fmax of the two metric fields, ignoring NaN (WOA23 alone below 1500 m)
 Per 100 km cell and standard depth level (pooled over 1992-2023, no time dimension, NaN where no observation):
-    rmse = sqrt(mean(d^2))                 spread about the reference, bias included
-    std  = sqrt(mean(d^2) - mean(d)^2)     spread about the cell's mean offset (population std; 0 when n=1)
-    bias = mean(d), n = number of values
+    rmse    = sqrt(mean(d^2))                                spread about the reference, bias included (NaN when n < 1)
+    std     = sqrt(n / (n - 1) * (mean(d^2) - mean(d)^2))    sample standard deviation about the cell's mean offset (ddof=1; NaN when n < 2)
+    bias    = mean(d), n = number of finite comparisons
+    n_eff   = number of distinct (100 km cell, UTC calendar day) sampling days with valid comparisons (de-clustered count proxy)
+    n_years = number of distinct calendar years (1992-2023) with valid comparisons
 
 Usage (from the repo root): python scripts/03_compute_expected_spread.py   (about 1.5 min, about 4 GB RAM)
 Outputs (untracked): outputs/expected_spread/expected_{std,rmse}_from_{woa23,aotd,woa23_and_aotd}_{potential_temperature,salinity}_ease2_100km.nc
@@ -55,6 +59,60 @@ def profile_grid_indices(lat, lon):
     return iy * NC + ix, row, col, inside
 
 
+def spatial_interp_weights(lat, lon):
+    """Bilinear interpolation indices and weights on the 0.25 deg reference subgrid (rows R0..719, cols 0..1439)."""
+    lat, lon = np.asarray(lat, dtype="float64"), np.asarray(lon, dtype="float64")
+    rf = (lat - (-89.875 + R0 * 0.25)) / 0.25
+    r0 = np.clip(np.floor(rf).astype(int), 0, NROW - 1)
+    r1 = np.minimum(r0 + 1, NROW - 1)
+    wr = np.clip(rf - r0, 0.0, 1.0)
+
+    cf = (lon + 179.875) / 0.25
+    c0_raw = np.floor(cf).astype(int)
+    wc = cf - c0_raw
+    c0 = c0_raw % 1440
+    c1 = (c0 + 1) % 1440
+    return r0, r1, wr, c0, c1, wc
+
+
+def temporal_interp_weights(time_sec):
+    """Linear temporal interpolation indices and weights for 12 monthly and 4 seasonal reference fields."""
+    ts = np.asarray(time_sec, dtype="int64").astype("datetime64[s]")
+    y0 = ts.astype("datetime64[Y]").astype("datetime64[s]")
+    y1 = (ts.astype("datetime64[Y]") + np.timedelta64(1, "Y")).astype("datetime64[s]")
+    frac = (ts - y0) / (y1 - y0)
+
+    pm = frac * 12.0 - 0.5
+    m0 = np.floor(pm).astype(int) % 12
+    m1 = (m0 + 1) % 12
+    wm = pm - np.floor(pm)
+
+    ps = frac * 4.0 - 0.5
+    s0 = np.floor(ps).astype(int) % 4
+    s1 = (s0 + 1) % 4
+    ws = ps - np.floor(ps)
+    return m0, m1, wm, s0, s1, ws
+
+
+def interp_ref_2d_time(field, t0, t1, wt, r0, r1, wr, c0, c1, wc):
+    """Bilinear spatial + linear temporal interpolation with mask-aware weight renormalization over finite corners."""
+    w00 = (1.0 - wr) * (1.0 - wc)
+    w01 = (1.0 - wr) * wc
+    w10 = wr * (1.0 - wc)
+    w11 = wr * wc
+    num = np.zeros((field.shape[1], len(r0)), dtype="float64")
+    den = np.zeros_like(num)
+    for ti, tw in ((t0, 1.0 - wt), (t1, wt)):
+        for ri, ci, sw in ((r0, c0, w00), (r0, c1, w01), (r1, c0, w10), (r1, c1, w11)):
+            v = field[ti, :, ri, ci].T.astype("float64") if field.ndim == 4 else field[ti][:, ri, ci]
+            w = (tw * sw)[None, :]
+            fin = np.isfinite(v)
+            num += np.where(fin, v * w, 0.0)
+            den += np.where(fin, w, 0.0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.where(den > 0, num / den, np.nan)
+
+
 def load_ref(letter, var):
     """monthly (12, 57, NROW, 1440) and seasonal (4, 102-57, NROW, 1440) float32 reference fields, plus depth (102,)."""
     mon = np.empty((12, NMONTHLY, NROW, 1440), "float32")
@@ -93,12 +151,22 @@ def load_aotd(key, depth):
     return out
 
 
-def deviation_statistics(n, s1, s2):
+def deviation_statistics(n, s1, s2, n_eff=None, n_years=None):
     with np.errstate(invalid="ignore", divide="ignore"):
         mean = s1 / n
-        return dict(rmse=np.where(n > 0, np.sqrt(s2 / n), np.nan),
-                    std=np.where(n > 0, np.sqrt(np.maximum(s2 / n - mean ** 2, 0)), np.nan),
-                    bias=np.where(n > 0, mean, np.nan), n=n)
+        pop_var = np.maximum(s2 / n - mean ** 2, 0.0)
+        sample_var = np.where(n >= 2, pop_var * (n / (n - 1.0)), np.nan)
+        out = dict(
+            rmse=np.where(n > 0, np.sqrt(s2 / n), np.nan),
+            std=np.where(n >= 2, np.sqrt(sample_var), np.nan),
+            bias=np.where(n > 0, mean, np.nan),
+            n=n,
+        )
+        if n_eff is not None:
+            out["n_eff"] = n_eff
+        if n_years is not None:
+            out["n_years"] = n_years
+        return out
 
 
 def combine_statistics(w, a):
@@ -110,6 +178,10 @@ def combine_statistics(w, a):
         pick_w = np.isnan(a_stored) | (w_stored >= a_stored)
         out[f"bias_{kind}"] = np.where(pick_w, w["bias"], a["bias"])
         out[f"n_{kind}"] = np.where(pick_w, w["n"], a["n"])
+        if "n_eff" in w and "n_eff" in a:
+            out[f"n_eff_{kind}"] = np.where(pick_w, w["n_eff"], a["n_eff"])
+        if "n_years" in w and "n_years" in a:
+            out[f"n_years_{kind}"] = np.where(pick_w, w["n_years"], a["n_years"])
     return out
 
 
@@ -121,6 +193,13 @@ def main():
     nlev = depth_all.shape[0]
     cell, row, col, inside = profile_grid_indices(lat, lon)
     year = d["year"].astype(int)
+    if "time" in d:
+        time_sec = d["time"].astype("int64")
+    else:
+        time_sec = ((year - 1970) * 365.2425 * 86400 + (month - 0.5) * 30.436875 * 86400).astype("int64")
+    day_id = time_sec // 86400
+    r0_all, r1_all, wr_all, c0_all, c1_all, wc_all = spatial_interp_weights(lat, lon)
+    m0_all, m1_all, wm_all, s0_all, s1_all, ws_all = temporal_interp_weights(time_sec)
     if np.any((month < 1) | (month > 12)):
         raise ValueError("Profile month must be in 1..12")
     inside &= year >= YEAR0
@@ -133,37 +212,63 @@ def main():
     aT, aS = load_aotd("temp", depth), load_aotd("salt", depth)
     To, So = d["temp"], d["salt"]
     z = depth_all[:, None]
-    acc = {(rn, v): [np.zeros((nlev, NC * NC)) for _ in range(3)] for rn in ("woa23", "aotd") for v in ("potential_temperature", "salinity")}
+    nm_actual = min(NMONTHLY, nlev)
+    acc = {
+        (rn, v): [
+            np.zeros((nlev, NC * NC)),
+            np.zeros((nlev, NC * NC)),
+            np.zeros((nlev, NC * NC)),
+            np.zeros((nlev, NC * NC), dtype="int32"),
+            np.zeros((nlev, NC * NC), dtype="uint64"),
+        ]
+        for rn in ("woa23", "aotd")
+        for v in ("potential_temperature", "salinity")
+    }
     for m in range(1, 13):
         sel = np.nonzero((month == m) & inside)[0]
-        r, c, ce, la = row[sel], col[sel], cell[sel], lat[sel]
+        if len(sel) == 0:
+            continue
+        ce, la = cell[sel], lat[sel]
+        yr_bit = np.uint64(1) << np.clip(year[sel] - YEAR0, 0, 62).astype("uint64")
+        cd_key = ce.astype("int64") * 100000 + day_id[sel]
+        r0, r1, wr, c0, c1, wc = r0_all[sel], r1_all[sel], wr_all[sel], c0_all[sel], c1_all[sel], wc_all[sel]
+        m0, m1, wm, s0, s1_i, ws = m0_all[sel], m1_all[sel], wm_all[sel], s0_all[sel], s1_all[sel], ws_all[sel]
         t_o, s_o = To[sel].T.astype("float64"), So[sel].T.astype("float64")
         for rn in ("woa23", "aotd"):
-            Tr = np.full((nlev, len(sel)), np.nan); Sr = Tr.copy()
+            Tr = np.full((nlev, len(sel)), np.nan)
+            Sr = Tr.copy()
             if rn == "woa23":
-                Tr[:NMONTHLY], Sr[:NMONTHLY] = monT[m - 1][:, r, c], monS[m - 1][:, r, c]
-                k = SEASON_FILE[m - 1] - 13
-                Tr[NMONTHLY:], Sr[NMONTHLY:] = sesT[k][:, r, c], sesS[k][:, r, c]
+                Tr[:nm_actual] = interp_ref_2d_time(monT[:, :nm_actual], m0, m1, wm, r0, r1, wr, c0, c1, wc)
+                Sr[:nm_actual] = interp_ref_2d_time(monS[:, :nm_actual], m0, m1, wm, r0, r1, wr, c0, c1, wc)
+                if nlev > nm_actual:
+                    Tr[nm_actual:] = interp_ref_2d_time(sesT, s0, s1_i, ws, r0, r1, wr, c0, c1, wc)
+                    Sr[nm_actual:] = interp_ref_2d_time(sesS, s0, s1_i, ws, r0, r1, wr, c0, c1, wc)
             else:
-                Tr[:NMONTHLY], Sr[:NMONTHLY] = aT[m - 1][:, r, c], aS[m - 1][:, r, c]
+                Tr[:nm_actual] = interp_ref_2d_time(aT[:, :nm_actual], m0, m1, wm, r0, r1, wr, c0, c1, wc)
+                Sr[:nm_actual] = interp_ref_2d_time(aS[:, :nm_actual], m0, m1, wm, r0, r1, wr, c0, c1, wc)
             S_for_obs = np.where(np.isnan(s_o), Sr, s_o)
             devs = {"potential_temperature": calculate_potential_T(t_o, S_for_obs, z, la) - calculate_potential_T(Tr, Sr, z, la),
                     "salinity": s_o - Sr}
             for v, dev in devs.items():
-                n, s1, s2 = acc[(rn, v)]
+                n, s1, s2, neff, ymask = acc[(rn, v)]
                 good = np.isfinite(dev)
                 for k in range(nlev):
                     g = good[k]
                     if g.any():
-                        n[k] += np.bincount(ce[g], minlength=NC * NC)
-                        s1[k] += np.bincount(ce[g], weights=dev[k, g], minlength=NC * NC)
-                        s2[k] += np.bincount(ce[g], weights=dev[k, g] ** 2, minlength=NC * NC)
+                        cg = ce[g]
+                        n[k] += np.bincount(cg, minlength=NC * NC)
+                        s1[k] += np.bincount(cg, weights=dev[k, g], minlength=NC * NC)
+                        s2[k] += np.bincount(cg, weights=dev[k, g] ** 2, minlength=NC * NC)
+                        uniq_cd = np.unique(cd_key[g])
+                        neff[k] += np.bincount(uniq_cd // 100000, minlength=NC * NC).astype("int32")
+                        np.bitwise_or.at(ymask[k], cg, yr_bit[g])
         print("month", m, "done", flush=True)
 
     shp = (nlev, NC, NC)
-    metrics = {}  # (product, var) -> dict(std, rmse, bias, n)
-    for (rn, v), (n, s1, s2) in acc.items():
-        metrics[(rn, v)] = deviation_statistics(n, s1, s2)
+    metrics = {}  # (product, var) -> dict(std, rmse, bias, n, n_eff, n_years)
+    for (rn, v), (n, s1, s2, neff, ymask) in acc.items():
+        nyears = np.bitwise_count(ymask).astype("int32")
+        metrics[(rn, v)] = deviation_statistics(n, s1, s2, n_eff=neff, n_years=nyears)
     for v in ("potential_temperature", "salinity"):
         w, a = metrics[("woa23", v)], metrics[("aotd", v)]
         metrics[("woa23_and_aotd", v)] = combine_statistics(w, a)
@@ -177,20 +282,26 @@ def main():
         short = "Theta" if v == "potential_temperature" else "S"
         unit = "degree_Celsius" if v == "potential_temperature" else "1e-3"
         pname = v.replace("_", " ")
-        for kind, desc in (("std", "standard deviation about the cell mean offset"), ("rmse", "RMSE (about the reference, bias included)")):
+        for kind, desc in (("std", "sample standard deviation (ddof=1) about the cell mean offset"), ("rmse", "RMSE (about the reference, bias included)")):
             bias = mt[f"bias_{kind}"] if rn == "woa23_and_aotd" else mt["bias"]
             n = mt[f"n_{kind}"] if rn == "woa23_and_aotd" else mt["n"]
+            n_eff = mt[f"n_eff_{kind}"] if rn == "woa23_and_aotd" else mt["n_eff"]
+            n_years = mt[f"n_years_{kind}"] if rn == "woa23_and_aotd" else mt["n_years"]
             ds = xr.Dataset(
                 {
                     f"{short}_{kind}": (("depth", "y", "x"), mt[kind].reshape(shp).astype("float32"),
                                         dict(long_name=f"expected {desc} of in situ {pname} from {titles[rn]}", units=unit,
                                              grid_mapping="crs", coordinates="lat lon",
-                                             comment="Deviation = obs - reference, both as potential temperature (T only), pooled per cell 1992-2023, no time dimension. "
-                                                     f"Product: {rn}. NaN where no observation; AOTD reference exists only to 1500 m.")),
+                                             comment="Deviation = obs - reference (bilinearly interpolated in space and linearly in time), both as potential temperature (T only), pooled per cell 1992-2023, no time dimension. "
+                                                     f"Product: {rn}. Sample std uses ddof=1 (NaN when n < 2); RMSE is NaN when n < 1; AOTD reference exists only to 1500 m.")),
                     f"{short}_bias": (("depth", "y", "x"), bias.reshape(shp).astype("float32"),
                                       dict(long_name=f"mean in situ {pname} minus reference", units=unit, grid_mapping="crs", coordinates="lat lon")),
                     f"{short}_n": (("depth", "y", "x"), n.reshape(shp).astype("int32"),
-                                   dict(long_name="number of in situ values used", units="1", grid_mapping="crs", coordinates="lat lon")),
+                                   dict(long_name="number of finite in situ comparison values used", units="1", grid_mapping="crs", coordinates="lat lon")),
+                    f"{short}_n_eff": (("depth", "y", "x"), n_eff.reshape(shp).astype("int32"),
+                                       dict(long_name="number of distinct (cell, UTC day) sampling days with valid comparisons (de-clustered count proxy)", units="1", grid_mapping="crs", coordinates="lat lon")),
+                    f"{short}_n_years": (("depth", "y", "x"), n_years.reshape(shp).astype("int32"),
+                                         dict(long_name="number of distinct calendar years (1992-2023) with valid comparisons", units="1", grid_mapping="crs", coordinates="lat lon")),
                     "crs": ((), np.int32(0), dict(grid_mapping_name="lambert_azimuthal_equal_area", latitude_of_projection_origin=90.0,
                                                   longitude_of_projection_origin=0.0, false_easting=0.0, false_northing=0.0,
                                                   semi_major_axis=6378137.0, inverse_flattening=298.257223563,
@@ -204,7 +315,7 @@ def main():
                 attrs=dict(title=f"Expected {kind} of in situ {pname} from {titles[rn]} on the EASE2 100 km Arctic grid",
                            Conventions="CF-1.8", history="scripts/03_compute_expected_spread.py"))
             f = f"{OUT}/expected_{kind}_from_{rn}_{v}_ease2_100km.nc"
-            ds.to_netcdf(f, encoding={k: dict(zlib=True, complevel=4) for k in (f"{short}_{kind}", f"{short}_bias", f"{short}_n")})
+            ds.to_netcdf(f, encoding={k: dict(zlib=True, complevel=4) for k in (f"{short}_{kind}", f"{short}_bias", f"{short}_n", f"{short}_n_eff", f"{short}_n_years")})
             print("wrote", f, flush=True)
 
 

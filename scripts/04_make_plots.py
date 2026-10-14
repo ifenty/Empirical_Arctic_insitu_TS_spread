@@ -153,12 +153,18 @@ def product_difference_maps():
 def counts_vs_depth():
     ds = load("rmse", "woa23", "Theta"); dep = ds.depth.values
     n = ds["Theta_n"].values.reshape(len(dep), -1); has = n > 0
+    neff = ds["Theta_n_eff"].values.reshape(len(dep), -1) if "Theta_n_eff" in ds else n
     fig, ax = plt.subplots(1, 3, figsize=(15, 4.5))
-    ax[0].plot(dep, np.maximum(n.sum(1), 1)); ax[0].set_yscale("log"); ax[0].set_title("profile values (all cells)")
-    ax[1].plot(dep, has.sum(1)); ax[1].set_title("cells with data (of 180x180)")
+    ax[0].plot(dep, np.maximum(n.sum(1), 1), label="all values (n)")
+    ax[0].plot(dep, np.maximum(neff.sum(1), 1), "--", label="sampling days (n_eff)")
+    ax[0].set_yscale("log"); ax[0].set_title("comparisons across all cells"); ax[0].legend(fontsize=8)
+    ax[1].plot(dep, has.sum(1), label="n >= 1 (RMSE)")
+    ax[1].plot(dep, (n >= 2).sum(1), "--", label="n >= 2 (sample std)")
+    ax[1].set_title("cells with data (of 180x180)"); ax[1].legend(fontsize=8)
     for th in (5, 30):
         ax[2].plot(dep, 100 * ((n < th) & has).sum(1) / np.maximum(has.sum(1), 1), label=f"n < {th}")
-    ax[2].set_title("% of cells with data that are sparse"); ax[2].legend()
+    ax[2].plot(dep, 100 * ((neff < 5) & has).sum(1) / np.maximum(has.sum(1), 1), "--", label="n_eff < 5")
+    ax[2].set_title("% of cells with data that are sparse"); ax[2].legend(fontsize=8)
     for a in ax:
         a.set_xscale("symlog", linthresh=100); a.set_xlim(0, 5500); a.set_xlabel("depth (m)"); a.grid(alpha=.3)
     fig.tight_layout(); fig.savefig(f"{OUTD}/counts_vs_depth.png", dpi=90); plt.close(fig)

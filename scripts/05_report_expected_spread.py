@@ -47,19 +47,26 @@ def table(kind, v):
 
 def counts_table():
     rows = [
-        "| depth (m) | values used | cells with data | % of valid cells with n < 5 | % with n < 30 |",
-        "|---|---|---|---|---|",
+        "| depth (m) | values used (`n`) | sampling days (`n_eff`) | median years (`n_years`) | cells with `n >= 1` (`n >= 2`) | % of valid cells with `n < 5` | % with `n_eff < 5` |",
+        "|---|---|---|---|---|---|---|",
     ]
     with load("rmse", "woa23", "Theta") as ds:
-        dep, counts = ds.depth.values, ds["Theta_n"].values
+        dep = ds.depth.values
+        counts = ds["Theta_n"].values
+        neff = ds["Theta_n_eff"].values if "Theta_n_eff" in ds else counts
+        nyrs = ds["Theta_n_years"].values if "Theta_n_years" in ds else counts
         for d in DEPTHS:
             k = int(np.argmin(np.abs(dep - d)))
-            n = counts[k]
+            n, ne, ny = counts[k], neff[k], nyrs[k]
             has = n > 0
-            fractions = [fmt(100 * ((n < th) & has).sum() / has.sum()) if has.any() else "–"
-                         for th in (5, 30)]
-            rows.append(f"| {dep[k]:.0f} | {int(n.sum()):,} | {int(has.sum())} | "
-                        + " | ".join(fractions) + " |")
+            has2 = int((n >= 2).sum())
+            med_yr = fmt(np.median(ny[has])) if has.any() else "–"
+            frac_n5 = fmt(100 * ((n < 5) & has).sum() / has.sum()) if has.any() else "–"
+            frac_ne5 = fmt(100 * ((ne < 5) & has).sum() / has.sum()) if has.any() else "–"
+            rows.append(
+                f"| {dep[k]:.0f} | {int(n.sum()):,} | {int(ne.sum()):,} | {med_yr} | "
+                f"{int(has.sum())} ({has2}) | {frac_n5} | {frac_ne5} |"
+            )
     return "\n".join(rows)
 
 
@@ -104,22 +111,23 @@ and pools years and months; there is no time dimension in the output.
 Temperature differences use surface-referenced potential temperature (Theta);
 salinity differences use practical salinity (S; conventionally reported here as psu).
 
-* **RMSE** = √mean(d²): mismatch relative to the reference, including the mean offset.
-* **std** = √mean((d − mean(d))²): population standard deviation after removing the offset.
+* **RMSE** = √mean(d²): mismatch relative to the reference, including the mean offset (defined when `n >= 1`).
+* **std** = √(n / (n − 1) · mean((d − mean(d))²)): **sample** standard deviation (`ddof=1`) after removing the cell's mean offset. It is `NaN` when `n < 2`, preventing zero-variance artifacts in singleton cells.
 * **bias** = mean(d), where d = observation − reference. This is a sample mean offset,
   not an independently established climatology error.
-* **n** counts finite differences at a cell and depth, not independent observations.
-  No minimum count is imposed; std is zero when n = 1.
+* **n** counts finite differences at a cell and depth, **n_eff** counts distinct `(100 km cell, UTC calendar day)` sampling days with valid differences (a de-clustered count proxy), and **n_years** counts distinct calendar years (1992–2023) represented in the cell.
 
-The `woa23` product uses the profile's calendar month at 0–1500 m and calendar season
-below 1500 m. The `aotd` product uses the published monthly AOTD climatology at
-0–1500 m only. `woa23_and_aotd` takes the larger finite metric at each cell and level;
+The `woa23` product uses the WOA23 0.25° monthly climatology at 0–1500 m and seasonal
+climatology below 1500 m, **bilinearly interpolated in space and linearly interpolated in time**
+(between mid-months or mid-seasons, with coast/mask-aware weight renormalization over finite corners).
+The `aotd` product uses the published monthly AOTD climatology at 0–1500 m only, interpolated identically.
+`woa23_and_aotd` takes the larger finite metric at each cell and level;
 when only one reference is available it uses that reference. Below 1500 m it therefore
-equals the WOA23 product. Its bias and n follow the selected reference **separately for
+equals the WOA23 product. Its `bias`, `n`, `n_eff` and `n_years` follow the selected reference **separately for
 std and RMSE**, so the two combined files may have different bias and count fields.
 
-A metric is NaN when no finite comparison is available, including when the reference
-is missing. No spatial filling is applied. These empirical summaries are neither pure
+A metric is NaN when insufficient finite comparisons are available (`n < 1` for RMSE, `n < 2` for sample std), including when the reference
+is missing. No spatial filling of the output spread grid is applied. These empirical summaries are neither pure
 observation-error estimates nor validated forecast uncertainties. The combined maximum
 is a reference-sensitivity envelope, not a calibrated confidence bound.
 
@@ -168,31 +176,36 @@ responsible for it.
 {bias_table()}
 
 {fig("product_difference_maps.png", "**Figure 4. AOTD-based RMSE minus WOA23-based RMSE where both metrics exist.** Blue denotes a smaller empirical AOTD-based RMSE, not independent validation of AOTD. Even within a shared output cell, the contributing observations can differ because the reference masks differ.")}
-## 5. Available comparisons
+## 5. Available comparisons and effective sampling diversity
 
-{fig("counts_vs_depth.png", "**Figure 5. WOA23-based potential-temperature comparison counts versus depth.** Panels show total finite differences, cells with data, and sparse-cell percentages conditional on n > 0. These counts need not describe salinity or the other products.")}
+{fig("counts_vs_depth.png", "**Figure 5. WOA23-based potential-temperature comparison counts versus depth.** Panels show total finite differences (`n`) and distinct sampling days (`n_eff`), cells with data (`n >= 1` and `n >= 2`), and sparse-cell percentages conditional on `n > 0`. These counts need not describe salinity or the other products.")}
 {counts_table()}
 
-Sparse cells have poorly constrained statistics; a singleton's zero std does not imply
-zero physical variability. Repeated measurements along tracks or sections can be
-correlated, so larger n does not guarantee proportionally more independent information.
+Sparse cells have poorly constrained statistics; singletons (`n = 1`) are excluded (`NaN`) from
+sample standard deviation (`std`) so they cannot produce artificial zero-variance weights.
+Because drifting Ice-Tethered Profilers and hydrographic sections take repeated measurements
+within the same grid cell, raw count `n` overstates independent sample size; `n_eff` (distinct
+sampling days) and `n_years` (distinct calendar years) provide practical de-clustering diagnostics.
 
 ## 6. Interpretation and limitations
 
 * Mismatch combines observational uncertainty, unresolved spatial and temporal
   variability, interannual change, trends, and reference limitations. This analysis
   does not identify their individual contributions.
-* For a single reference and the same samples, RMSE² = std² + bias². This identity
-  need not hold across the separately selected combined std and RMSE products.
-* AOTD scatter and climatology share source data; the extent of overlap with WOA23
-  is not established here. Smaller mismatch is not an out-of-sample skill estimate.
-* Reference lookup uses a 0.25° cell without spatial or temporal interpolation.
-  AOTD is mapped to WOA23 centres under an adopted grid-alignment assumption.
+* For a single reference and the same samples with `n >= 2`, `RMSE² = ((n − 1) / n) · std² + bias²`.
+  This identity need not hold across the separately selected combined `std` and `RMSE` products.
+* AOTD scatter and climatology share 1983–2023 source data, making `from_aotd` an **in-sample**
+  residual calculation; the extent of overlap with WOA23 is not established here. Smaller mismatch
+  relative to AOTD reflects in-sample fitting and shared processing rather than out-of-sample skill.
+* Reference values are bilinearly interpolated in space and linearly interpolated between mid-months
+  (or mid-seasons below 1500 m) with mask-aware renormalization near coasts. AOTD is mapped to WOA23
+  centres under an adopted grid-alignment assumption.
 * The [climatology comparison](../woa_compare/woa_compare_report.md) documents a
-  marked deep-salinity disagreement in ten AOTD months. It warrants investigation
-  but does not independently establish which reference is correct.
-* Applying these pooled spreads to assimilation or prediction requires additional
-  validation, sampling safeguards and a treatment of correlated errors.
+  marked deep-salinity anomaly (800–1500 m) in ten AOTD months, which inflates `from_aotd` and
+  `woa23_and_aotd` salinity spread where deep profiles sample those months.
+* Applying these pooled spreads to assimilation or prediction requires minimum-count filtering
+  (e.g., on `n_eff` and `n_years`), spatial regularization where cells are `NaN`, and a treatment
+  of correlated errors.
 
 ## 7. Data and provenance
 
@@ -203,8 +216,8 @@ reference's bias. The figures are generated by `scripts/04_make_plots.py`.
 
 NetCDF products follow
 `expected_{{std,rmse}}_from_{{woa23,aotd,woa23_and_aotd}}_{{potential_temperature,salinity}}_ease2_100km.nc`
-in `outputs/expected_spread/` (12 files). Each contains the metric, bias, n, coordinates
-and CRS metadata; regenerate them with `scripts/03_compute_expected_spread.py`.
+in `outputs/expected_spread/` (12 files). Each contains the metric, `*_bias`, `*_n`, `*_n_eff`,
+`*_n_years`, coordinates and CRS metadata; regenerate them with `scripts/03_compute_expected_spread.py`.
 
 Source credit: Li, J., Wu, X. & Wang, X. (2025), *An Arctic Ocean Thermohaline Dataset*,
 [doi:10.1038/s41597-025-05855-3](https://doi.org/10.1038/s41597-025-05855-3);

@@ -29,13 +29,17 @@ def test_depth_validation_checks_values_not_only_length():
         spread.check_depth_levels(np.array([0, 5, 15]), np.array([0, 5, 10]), "test")
 
 
-def test_population_statistics_and_empty_cells():
+def test_sample_statistics_and_empty_or_singleton_cells():
     result = spread.deviation_statistics(
         np.array([0, 1, 2]), np.array([0, 3, 4]), np.array([0, 9, 10]),
+        n_eff=np.array([0, 1, 2]), n_years=np.array([0, 1, 2]),
     )
     np.testing.assert_allclose(result["bias"], [np.nan, 3, 2], equal_nan=True)
-    np.testing.assert_allclose(result["std"], [np.nan, 0, 1], equal_nan=True)
+    # Sample std (ddof=1): NaN for n=0 and n=1; for n=2 with values [1, 3], mean=2, sample_std=sqrt(2)
+    np.testing.assert_allclose(result["std"], [np.nan, np.nan, np.sqrt(2)], equal_nan=True)
     np.testing.assert_allclose(result["rmse"], [np.nan, 3, np.sqrt(5)], equal_nan=True)
+    np.testing.assert_array_equal(result["n_eff"], [0, 1, 2])
+    np.testing.assert_array_equal(result["n_years"], [0, 1, 2])
 
 
 def test_envelope_selects_each_statistics_own_bias_and_count():
@@ -87,6 +91,11 @@ def test_main_writes_complete_products_from_synthetic_profiles(tmp_path, monkeyp
 
     monkeypatch.setattr(spread, "load_ref", reference)
     monkeypatch.setattr(spread, "load_aotd", lambda key, depth: np.full((12, 2, 1, 1), 2 if key == "temp" else 34))
+    monkeypatch.setattr(
+        spread, "spatial_interp_weights",
+        lambda lat, lon: (np.zeros(len(lat), int), np.zeros(len(lat), int), np.zeros(len(lat)),
+                          np.zeros(len(lat), int), np.zeros(len(lat), int), np.zeros(len(lat))),
+    )
     spread.main()
     files = list((tmp_path / "outputs" / "expected_spread").glob("*.nc"))
     assert len(files) == 12
@@ -96,11 +105,14 @@ def test_main_writes_complete_products_from_synthetic_profiles(tmp_path, monkeyp
             short = "Theta" if "potential_temperature" in path.name else "S"
             metric = "std" if "expected_std_" in path.name else "rmse"
             count, values = ds[f"{short}_n"].values, ds[f"{short}_{metric}"].values
-            np.testing.assert_array_equal(np.isnan(values), count == 0)
+            assert f"{short}_n_eff" in ds and f"{short}_n_years" in ds
+            np.testing.assert_array_equal(np.isnan(values), count < (2 if metric == "std" else 1))
             assert (count[:, 1:, :] == 0).all()
             if "from_aotd_" in path.name:
                 assert (count[2] == 0).all()
             else:
                 np.testing.assert_array_equal(count[:, 0, 0], [2, 2, 2])
+                np.testing.assert_array_equal(ds[f"{short}_n_eff"].values[:, 0, 0], [2, 2, 2])
+                np.testing.assert_array_equal(ds[f"{short}_n_years"].values[:, 0, 0], [2, 2, 2])
             if short == "Theta" and "from_woa23_" in path.name:
-                assert values[0, 0, 0] == pytest.approx(1 if metric == "std" else np.sqrt(5))
+                assert values[0, 0, 0] == pytest.approx(np.sqrt(2) if metric == "std" else np.sqrt(5))

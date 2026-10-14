@@ -36,35 +36,43 @@ def test_spread_table_discloses_each_finite_mask(monkeypatch):
 
 
 def test_sparse_percentages_condition_on_positive_counts(monkeypatch):
-    ds = xr.Dataset({"Theta_n": (("depth", "y", "x"), [[[0, 1, 4, 30]], [[0, 0, 0, 0]]])},
-                    coords={"depth": [10, 50]})
+    ds = xr.Dataset(
+        {
+            "Theta_n": (("depth", "y", "x"), [[[0, 1, 4, 30]], [[0, 0, 0, 0]]]),
+            "Theta_n_eff": (("depth", "y", "x"), [[[0, 1, 2, 10]], [[0, 0, 0, 0]]]),
+            "Theta_n_years": (("depth", "y", "x"), [[[0, 1, 2, 5]], [[0, 0, 0, 0]]]),
+        },
+        coords={"depth": [10, 50]},
+    )
     monkeypatch.setattr(spread, "load", lambda *args: ds.copy(deep=True))
     monkeypatch.setattr(spread, "DEPTHS", (10, 50))
     text = spread.counts_table()
-    assert "| 10 | 35 | 3 | 66.7 | 66.7 |" in text
-    assert "| 50 | 0 | 0 | – | – |" in text
+    assert "| 10 | 35 | 13 | 2 | 3 (2) | 66.7 | 66.7 |" in text
+    assert "| 50 | 0 | 0 | – | 0 (0) | – | – |" in text
 
 
-def test_reference_statistics_use_finite_intersection():
-    woa = np.zeros((12, 2, 1, 1, 12))
-    woa[:, 0, 0, 0] = np.arange(12)
+def test_reference_statistics_use_finite_intersection_and_area_weights():
+    woa = np.zeros((12, 2, 1, 2, 6))
+    woa[:, 0, 0, 0] = np.arange(6)
+    woa[:, 0, 0, 1] = np.arange(6)
     woa[:, 1] = 29
     pub = woa.copy()
-    pub[:, 0] += 2
+    pub[:, 0, 0, 0] += 1  # lower lat row (larger weight)
+    pub[:, 0, 0, 1] += 3  # higher lat row (smaller weight)
     pub[:, 1] += 1
-    woa[:, 0, 0, 0, -1] = np.nan
-    df = compare.stats(woa, pub, np.array([10]))
+    woa[:, 0, 0, 1, -1] = np.nan
+    lat = np.array([60.0, 80.0])
+    df = compare.stats(woa, pub, np.array([10]), lat=lat)
     t = df[(df["var"] == "T") & (df.month == 1)].iloc[0]
     assert (t.n_aotd, t.n_woa, t.n_both) == (12, 11, 11)
-    assert t.bias == pytest.approx(2)
-    assert t.rmse == pytest.approx(2)
-    assert t["corr"] == pytest.approx(1)
+    assert t.bias < t.bias_unweighted
+    assert t.rmse < t.rmse_unweighted
     assert df.loc[df["var"] == "S", "corr"].isna().all()
 
 
 def test_insufficient_shared_cells_have_explicit_missing_statistics():
     fields = np.zeros((12, 2, 1, 1, 10))
-    df = compare.stats(fields, fields, np.array([10]))
+    df = compare.stats(fields, fields, np.array([10]), lat=np.array([75.0]))
     assert (df.n_both == 10).all()
     assert df[["bias", "rmse", "corr", "maxabs"]].isna().all().all()
     assert "| 10 | – | – | – | – | – |" in compare.comparison_table(df)
