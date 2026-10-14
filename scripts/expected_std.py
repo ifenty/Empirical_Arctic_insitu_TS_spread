@@ -1,6 +1,6 @@
 """Expected standard deviation of in situ T and S about WOA23, on the EASE2-Grid 2.0 North 100 km grid.
 
-For every in situ profile value (scatter data, all years) the deviation d = obs - WOA23 reference is formed at the profile's
+For every in situ profile value (scatter data, 1992 onwards) the deviation d = obs - WOA23 reference is formed at the profile's
 location (nearest WOA23 0.25 deg cell). The reference is the monthly WOA23 field of the profile's month for the 57 monthly levels
 (0-1500 m) and the seasonal field of the profile's season for deeper levels. Deviations are pooled per 100 km cell and standard
 depth level:
@@ -26,6 +26,7 @@ R0 = 599  # WOA23 lat row of the cell centred on 59.875 N
 NROW = 720 - R0
 CELL, HALF = 100e3, 9000e3
 NC = 180
+YEAR0 = 1992  # first year of in situ data used
 SEASON_FILE = np.array([13, 13, 13, 14, 14, 14, 15, 15, 15, 16, 16, 16])  # WOA23 winter, spring, summer, autumn
 
 
@@ -56,7 +57,8 @@ def main():
     x, y = t.transform(lon, lat)
     ix = np.floor((x + HALF) / CELL).astype(int)
     iy = np.floor((HALF - y) / CELL).astype(int)
-    inside = (ix >= 0) & (ix < NC) & (iy >= 0) & (iy < NC)
+    year = d["year"].astype(int)
+    inside = (year >= YEAR0) & (ix >= 0) & (ix < NC) & (iy >= 0) & (iy < NC)
     cell = iy * NC + ix
     row = np.floor((lat + 90.0) / 0.25).astype(int) - R0
     col = np.floor((lon + 180.0) / 0.25).astype(int) % 1440
@@ -103,7 +105,7 @@ def main():
                 f"{short}_std": (("depth", "y", "x"), std.astype("float32"),
                                  dict(long_name=f"expected standard deviation of in situ {name} about WOA23",
                                       units=unit, grid_mapping="crs", coordinates="lat lon",
-                                      comment="sqrt(mean((obs - WOA23)^2)) over all profile values in the cell, 1983-2023, no time dimension. "
+                                      comment="sqrt(mean((obs - WOA23)^2)) over all profile values in the cell, 1992-2023, no time dimension. "
                                               "Reference: WOA23 decav91C0 monthly (0-1500 m) or seasonal (deeper) field of the profile month. NaN where no observation.")),
                 f"{short}_bias": (("depth", "y", "x"), bias.astype("float32"),
                                   dict(long_name=f"mean in situ {name} minus WOA23", units=unit, grid_mapping="crs", coordinates="lat lon")),
@@ -120,7 +122,7 @@ def main():
                         y=("y", yc, dict(standard_name="projection_y_coordinate", units="m", axis="Y")),
                         x=("x", xc, dict(standard_name="projection_x_coordinate", units="m", axis="X"))),
             attrs=dict(title=f"Expected standard deviation of in situ {name} relative to WOA23 on the EASE2 100 km Arctic grid",
-                       Conventions="CF-1.8", source="AOTD scatter profiles 1983-2023 interpolated to WOA standard depths; WOA23 decav91C0",
+                       Conventions="CF-1.8", source="AOTD scatter profiles 1992-2023 interpolated to WOA standard depths; WOA23 decav91C0",
                        history="scripts/expected_std.py"))
         enc = {v: dict(zlib=True, complevel=4) for v in (f"{short}_std", f"{short}_bias", f"{short}_n")}
         f = f"{OUT}/expected_std_{name}_ease2_100km.nc"
