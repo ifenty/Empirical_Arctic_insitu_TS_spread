@@ -1,6 +1,6 @@
 # AOTD (published) vs WOA23 decav91C0
 
-Produced by `scripts/06_compare_aotd_woa23.py`. Per-level, per-month numbers: `tables/level_stats.csv`. Depth profiles: `figures/aotd_vs_woa23_vs_depth.png`. Maps (Jan/Mar/Jun/Sep, published | WOA23 | difference) at 10, 100 and 1500 m: `figures/maps/`.
+Produced by `scripts/06_report_aotd_vs_woa23.py`. Per-level, per-month numbers: `tables/level_stats.csv`. Depth profiles: `figures/aotd_vs_woa23_vs_depth.png`. Maps (Jan/Mar/Jun/Sep, published | WOA23 | difference) at 10, 100 and 1500 m: `figures/maps/`.
 
 ## Method
 - WOA23: objectively analysed `t_an` / `s_an`, monthly, 0.25 deg, 57 levels (0-1500 m), 1991-2020. AOTD: 1983-2023.

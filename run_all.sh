@@ -10,12 +10,12 @@ $PY scripts/01_download_data.py            # download scatter, AOTD climatology,
 $PY scripts/02_prepare_scatter.py          # cache the scattered profiles -> data/scatter_all.npz
 $PY scripts/03_compute_expected_spread.py  # expected std / RMSE / bias / n -> outputs/expected_spread/*.nc
 $PY scripts/04_make_plots.py               # figures -> reports/expected_spread/figures/
-$PY scripts/05_make_report.py              # report + tables -> reports/expected_spread/
-$PY scripts/06_compare_aotd_woa23.py       # AOTD vs WOA23 diagnostic -> reports/woa_compare/
+$PY scripts/05_report_expected_spread.py       # expected-spread report -> reports/expected_spread/
+$PY scripts/06_report_aotd_vs_woa23.py         # AOTD vs WOA23 report -> reports/woa_compare/
 
 # Scatter-data report: needs the NSIDC EASE2 25 km files (Earthdata login), which cannot be downloaded automatically.
 if [ -d data/ease2 ]; then
-    $PY scripts/07_scatter_data_report.py  # -> reports/scatter/
+    $PY scripts/07_report_scatter_data.py  # -> reports/scatter/
 else
-    echo "Skipping scripts/07_scatter_data_report.py: data/ease2 not found (see README)."
+    echo "Skipping scripts/07_report_scatter_data.py: data/ease2 not found (see README)."
 fi

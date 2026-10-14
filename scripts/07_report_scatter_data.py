@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Descriptive report of the AOTD scattered (profile) data.
 
-Run from the repo root:  python scripts/07_scatter_data_report.py   (optional diagnostic; needs the NSIDC EASE2 25 km ancillary files in data/ease2, see README)
+Run from the repo root:  python scripts/07_report_scatter_data.py   (optional diagnostic; needs the NSIDC EASE2 25 km ancillary files in data/ease2, see README)
 Writes ONLY to reports/scatter/ (md report, figures/*.png, tables/*.csv).
 Every number in the markdown is computed here; provenance classes are INFERRED heuristics.
 """
@@ -1729,7 +1729,7 @@ EXEC = [
 ]
 HEAD = [
     "# AOTD scattered (profile) data: descriptive report\n",
-    f"*Generated {GEN_DATE} by `scripts/07_scatter_data_report.py`. All numbers are computed from `data/scatter_all.npz` "
+    f"*Generated {GEN_DATE} by `scripts/07_report_scatter_data.py`. All numbers are computed from `data/scatter_all.npz` "
     "(the normalised cache of the yearly files; NaN = missing for T, S, pressure and density).*\n",
     "## Executive summary\n", "\n".join(EXEC) + "\n",
     "## Data notes and conventions\n",

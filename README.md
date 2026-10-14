@@ -46,11 +46,16 @@ Or step by step (always from the repo root):
 | 02 | `python scripts/02_prepare_scatter.py` | concatenates yearly scatter files, normalises missing values | `data/scatter_all.npz` |
 | 03 | `python scripts/03_compute_expected_spread.py` | deviations from the references in potential temperature and salinity, per-cell std/RMSE/bias/n, 3 products (about 1.5 min) | `outputs/expected_spread/*.nc` (12 files) |
 | 04 | `python scripts/04_make_plots.py` | maps at 10/100/1500 m, log10 profile counts, median spread and counts vs depth, for each statistic and product | `reports/expected_spread/figures/*.png` (11 files) |
-| 05 | `python scripts/05_make_report.py` | writes the report with tables and captions | `reports/expected_spread/expected_spread_report.md` |
+| 05 | `python scripts/05_report_expected_spread.py` | writes the expected-spread report (tables and captioned figures from 03/04) | `reports/expected_spread/expected_spread_report.md` |
 
-Diagnostics (not needed for the products; 06 is run by `run_all.sh`, 07 only if `data/ease2/` exists):
-* `python scripts/06_compare_aotd_woa23.py` compares the published AOTD climatology with WOA23 (-> `reports/woa_compare/`).
-* `python scripts/07_scatter_data_report.py` describes the scattered data, including heuristically inferred platform classes (-> `reports/scatter/`). It also needs the NSIDC EASE-Grid 2.0 N 25 km ancillary files in `data/ease2/` (NSIDC-0772 lat/lon and NSIDC-0609 LOCI land mask; these require a free NASA Earthdata login, so they are not downloaded automatically).
+Further reports (not needed for the products; 06 is run by `run_all.sh`, 07 only if `data/ease2/` exists):
+
+| script | what it does | output |
+|---|---|---|
+| `python scripts/06_report_aotd_vs_woa23.py` | report comparing the published AOTD climatology with WOA23, the two references (RMSE, bias, maps) | `reports/woa_compare/woa_compare_report.md` |
+| `python scripts/07_report_scatter_data.py` | report describing the scattered profiles (coverage, time, platform classes inferred heuristically). Needs the NSIDC EASE-Grid 2.0 N 25 km files in `data/ease2/` (NSIDC-0772 lat/lon, NSIDC-0609 LOCI land mask; free NASA Earthdata login, not downloaded automatically) | `reports/scatter/scatter_report.md` |
+
+Each `reports/<name>/` folder has the report `.md`, `figures/` and `tables/`.
 
 Tests: `pytest tests`.
 
