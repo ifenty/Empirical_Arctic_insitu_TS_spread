@@ -1,4 +1,4 @@
-cluster size,centre lat,centre lon,start,end,lat span (deg),profiles with a duplicate-T twin,dominant inferred class,dominant region
+cluster size,centre lat,centre lon,start,end,lat span (deg),profiles with an identical-T match,dominant inferred class,dominant region
 2371,79.04717945177713,-130.45568109815608,2023-01-04T18:33:00,2023-05-17T12:33:00,2.4050979614257812,4,ITP-like,Beaufort Sea / Canada Basin
 1634,79.69919081913214,-134.41955371235693,2022-10-08T08:33:00,2023-01-15T20:33:00,1.15496826171875,0,ITP-like,Beaufort Sea / Canada Basin
 1539,79.01595906734157,-144.90457584611622,2022-12-11T00:33:00,2023-04-18T06:33:00,2.79144287109375,1351,other/unclassified,Beaufort Sea / Canada Basin

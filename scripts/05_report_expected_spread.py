@@ -1,18 +1,19 @@
-"""Write reports/expected_spread/expected_spread_report.md: summary tables computed from the product files in
-outputs/expected_spread/ plus all figures from 04_make_plots.py with captions."""
-import os
+"""Summarize the expected-spread NetCDF products and caption the figures from script 04."""
+from contextlib import ExitStack
+from pathlib import Path
+
 import numpy as np
 import xarray as xr
 
-D, OUT = "outputs/expected_spread", "reports/expected_spread/expected_spread_report.md"
+D = Path("outputs/expected_spread")
+OUT = Path("reports/expected_spread/expected_spread_report.md")
 PRODS = ("woa23", "aotd", "woa23_and_aotd")
 NAMES = {"Theta": "potential_temperature", "S": "salinity"}
-UNIT = {"Theta": "°C", "S": "psu"}
 DEPTHS = (10, 50, 100, 200, 500, 1000, 1500, 2500, 4000)
 
 
 def load(kind, prod, v):
-    return xr.open_dataset(f"{D}/expected_{kind}_from_{prod}_{NAMES[v]}_ease2_100km.nc")
+    return xr.open_dataset(D / f"expected_{kind}_from_{prod}_{NAMES[v]}_ease2_100km.nc")
 
 
 def fmt(x):
@@ -20,39 +21,65 @@ def fmt(x):
 
 
 def table(kind, v):
-    rows = ["| depth (m) | " + " | ".join(f"{p} median [10–90%]" for p in PRODS) + " | cells with data (woa23) |", "|---" * (len(PRODS) + 2) + "|"]
-    ds = {p: load(kind, p, v) for p in PRODS}
-    dep = ds["woa23"].depth.values
-    for d in DEPTHS:
-        k = int(np.argmin(np.abs(dep - d)))
-        cells = []
-        for p in PRODS:
-            f = ds[p][f"{v}_{kind}"].values[k]
-            f = f[np.isfinite(f)]
-            cells.append("–" if f.size == 0 else f"{np.median(f):.3g} [{np.percentile(f, 10):.2g}–{np.percentile(f, 90):.2g}]")
-        n = ds["woa23"][f"{v}_n"].values[k]
-        rows.append(f"| {dep[k]:.0f} | " + " | ".join(cells) + f" | {int((n > 0).sum())} |")
+    rows = [
+        "| depth (m) | " + " | ".join(f"{p} median [P10–P90]" for p in PRODS)
+        + " | valid cells: WOA23 / AOTD / combined |",
+        "|---|---|---|---|---|",
+    ]
+    with ExitStack() as stack:
+        ds = {p: stack.enter_context(load(kind, p, v)) for p in PRODS}
+        dep = ds["woa23"].depth.values
+        fields = {p: ds[p][f"{v}_{kind}"].values for p in PRODS}
+        for d in DEPTHS:
+            k = int(np.argmin(np.abs(dep - d)))
+            cells, counts = [], []
+            for p in PRODS:
+                f = fields[p][k]
+                f = f[np.isfinite(f)]
+                counts.append(str(f.size))
+                cells.append(
+                    "–" if not f.size else
+                    f"{np.median(f):.3g} [{np.percentile(f, 10):.2g}–{np.percentile(f, 90):.2g}]"
+                )
+            rows.append(f"| {dep[k]:.0f} | " + " | ".join(cells) + " | " + " / ".join(counts) + " |")
     return "\n".join(rows)
 
 
 def counts_table():
-    ds = load("rmse", "woa23", "Theta"); dep = ds.depth.values
-    rows = ["| depth (m) | values used | cells with data | % cells n<5 | % cells n<30 |", "|---|---|---|---|---|"]
-    for d in DEPTHS:
-        k = int(np.argmin(np.abs(dep - d))); n = ds["Theta_n"].values[k]; has = n > 0
-        rows.append(f"| {dep[k]:.0f} | {int(n.sum()):,} | {int(has.sum())} | {100 * ((n < 5) & has).mean() / max(has.mean(), 1e-9):.0f} | {100 * ((n < 30) & has).mean() / max(has.mean(), 1e-9):.0f} |")
+    rows = [
+        "| depth (m) | values used | cells with data | % of valid cells with n < 5 | % with n < 30 |",
+        "|---|---|---|---|---|",
+    ]
+    with load("rmse", "woa23", "Theta") as ds:
+        dep, counts = ds.depth.values, ds["Theta_n"].values
+        for d in DEPTHS:
+            k = int(np.argmin(np.abs(dep - d)))
+            n = counts[k]
+            has = n > 0
+            fractions = [fmt(100 * ((n < th) & has).sum() / has.sum()) if has.any() else "–"
+                         for th in (5, 30)]
+            rows.append(f"| {dep[k]:.0f} | {int(n.sum()):,} | {int(has.sum())} | "
+                        + " | ".join(fractions) + " |")
     return "\n".join(rows)
 
 
 def bias_table():
-    rows = ["| depth (m) | Theta bias median (°C) | Theta bias 10–90% | S bias median (psu) | S bias 10–90% |", "|---|---|---|---|---|"]
-    t, s = load("rmse", "woa23", "Theta"), load("rmse", "woa23", "S"); dep = t.depth.values
-    for d in DEPTHS:
-        k = int(np.argmin(np.abs(dep - d))); r = [f"{dep[k]:.0f}"]
-        for ds, v in ((t, "Theta"), (s, "S")):
-            f = ds[f"{v}_bias"].values[k]; f = f[np.isfinite(f)]
-            r += [fmt(np.median(f)) if f.size else "–", f"{np.percentile(f, 10):.2g} … {np.percentile(f, 90):.2g}" if f.size else "–"]
-        rows.append("| " + " | ".join(r) + " |")
+    rows = [
+        "| depth (m) | Theta bias median (°C) | Theta bias P10–P90 | S bias median (psu) | S bias P10–P90 |",
+        "|---|---|---|---|---|",
+    ]
+    with load("rmse", "woa23", "Theta") as t, load("rmse", "woa23", "S") as s:
+        dep = t.depth.values
+        fields = {"Theta": t["Theta_bias"].values, "S": s["S_bias"].values}
+        for d in DEPTHS:
+            k = int(np.argmin(np.abs(dep - d)))
+            r = [f"{dep[k]:.0f}"]
+            for v in ("Theta", "S"):
+                f = fields[v][k]
+                f = f[np.isfinite(f)]
+                r += [fmt(np.median(f)) if f.size else "–",
+                      f"{np.percentile(f, 10):.2g} … {np.percentile(f, 90):.2g}" if f.size else "–"]
+            rows.append("| " + " | ".join(r) + " |")
     return "\n".join(rows)
 
 
@@ -60,27 +87,51 @@ def fig(name, cap):
     return f"{cap}\n\n![{name}](figures/{name})\n"
 
 
-text = f"""# Expected spread of Arctic in situ T and S about reference monthly climatologies
+def report():
+    return f"""# Empirical spread of Arctic profiles relative to climatology
 
-Generated by `scripts/05_report_expected_spread.py` from `outputs/expected_spread/*.nc`. Method details: [`technical_note.md`](../../technical_note.md).
+Generated by `scripts/05_report_expected_spread.py` from the local NetCDF products in
+`outputs/expected_spread/`. See the [technical note](../../technical_note.md) for the
+method, the [README](../../README.md) for reproduction, and the
+[reference comparison](../woa_compare/woa_compare_report.md) for climatology diagnostics.
 
-## 1. What is estimated
+## 1. Scope and definitions
 
-For every EASE2 100 km cell (180 × 180) and each of the 102 WOA depth levels, we estimate how much individual in situ profile values
-(1992–2023, 400,280 profiles from the AOTD scattered data) differ from a reference monthly climatology. Differences are
-d = obs − reference for potential temperature (Theta) and practical salinity (S), pooled over all months and years.
+The products summarize finite observation-minus-reference differences within each
+100 km EASE-Grid 2.0 North cell (EPSG:6931; 180 × 180 cells) and each of the 102 WOA
+standard depth levels. The computation selects AOTD scatter profiles from 1992 onward
+and pools years and months; there is no time dimension in the output.
+Temperature differences use surface-referenced potential temperature (Theta);
+salinity differences use practical salinity (S; conventionally reported here as psu).
 
-* **std** – standard deviation of d about its own cell mean (spread after removing the mean offset).
-* **rmse** – √mean(d²), i.e. spread about the reference itself (std and bias combined).
-* **bias** – mean d. **n** – number of values contributing.
-* **Reference / product**: `woa23` (WOA23 monthly, 0–5500 m), `aotd` (published AOTD monthly climatology, 0–1500 m only) and
-  `woa23_and_aotd` = max of the two. Below 1500 m the combined product equals the WOA23 one.
-* Cells without observations are NaN; no minimum n is applied, so check the `*_n` fields (section 5).
+* **RMSE** = √mean(d²): mismatch relative to the reference, including the mean offset.
+* **std** = √mean((d − mean(d))²): population standard deviation after removing the offset.
+* **bias** = mean(d), where d = observation − reference. This is a sample mean offset,
+  not an independently established climatology error.
+* **n** counts finite differences at a cell and depth, not independent observations.
+  No minimum count is imposed; std is zero when n = 1.
+
+The `woa23` product uses the profile's calendar month at 0–1500 m and calendar season
+below 1500 m. The `aotd` product uses the published monthly AOTD climatology at
+0–1500 m only. `woa23_and_aotd` takes the larger finite metric at each cell and level;
+when only one reference is available it uses that reference. Below 1500 m it therefore
+equals the WOA23 product. Its bias and n follow the selected reference **separately for
+std and RMSE**, so the two combined files may have different bias and count fields.
+
+A metric is NaN when no finite comparison is available, including when the reference
+is missing. No spatial filling is applied. These empirical summaries are neither pure
+observation-error estimates nor validated forecast uncertainties. The combined maximum
+is a reference-sensitivity envelope, not a calibrated confidence bound.
 
 ## 2. Spread versus depth
 
-{fig("spread_vs_depth.png", "**Figure 1. Median (lines) of expected RMSE, std and RMSE/std over cells, 0–1500 m, for the three products; shading is the 10–90% range of cells for the WOA23 product.** Top: Theta; bottom: S. RMSE/std is shown only for cells with n ≥ 5. Values are largest near the surface and drop by an order of magnitude by 1000 m.")}
-{fig("spread_vs_depth_full.png", "**Figure 2. As Figure 1 for the WOA23-based product over the full depth range (0–5500 m, symlog axis).**")}
+Tables and depth curves summarize **each product's own finite cells**, with equal weight
+per cell, not per profile. The masks can differ between references and depths; lower
+medians do not by themselves establish a better reference. P10–P90 is the spatial
+percentile range, not a confidence interval. Counts for all three masks are shown.
+
+{fig("spread_vs_depth.png", "**Figure 1. Spatial median RMSE, std and cellwise RMSE/std at 0–1500 m.** Top: Theta; bottom: S. WOA23 shading shows P10–P90 across finite cells. Ratios require n ≥ 5 for both metrics and positive std; the combined ratio can divide metrics selected from different references.")}
+{fig("spread_vs_depth_full.png", "**Figure 2. WOA23-based summaries over 0–5500 m.** As in Figure 1, with a symlog depth axis. Sparse deep sampling should be considered alongside the curves.")}
 ### Theta RMSE (°C)
 
 {table("rmse", "Theta")}
@@ -97,57 +148,97 @@ d = obs − reference for potential temperature (Theta) and practical salinity (
 
 {table("std", "S")}
 
-## 3. Maps
+## 3. Spatial distributions
 
-Each overview figure has map rows for the metric (Theta and S) at 10, 100 and 1500 m, log10 count maps, and depth profiles of the median
-metric and counts. Large values sit on shelves, in the marginal seas and in boundary currents, where fronts and mesoscale features
-dominate; the central basins are the quietest.
+The overview figures show Theta and S metrics at 10, 100 and 1500 m, log10 counts,
+and depth summaries. Count maps describe the available comparisons, not an effective
+sample size. Colour scales are panel-specific; consult the colour bars before comparing
+magnitudes. The maps describe spatial structure but do not separate the processes
+responsible for it.
 
-| | std | RMSE |
+| reference | std | RMSE |
 |---|---|---|
-| from WOA23 | ![](figures/expected_std_overview_from_woa23.png) | ![](figures/expected_rmse_overview_from_woa23.png) |
-| from AOTD | ![](figures/expected_std_overview_from_aotd.png) | ![](figures/expected_rmse_overview_from_aotd.png) |
-| max of both | ![](figures/expected_std_overview_from_woa23_and_aotd.png) | ![](figures/expected_rmse_overview_from_woa23_and_aotd.png) |
+| WOA23 | ![WOA23 std overview](figures/expected_std_overview_from_woa23.png) | ![WOA23 RMSE overview](figures/expected_rmse_overview_from_woa23.png) |
+| AOTD | ![AOTD std overview](figures/expected_std_overview_from_aotd.png) | ![AOTD RMSE overview](figures/expected_rmse_overview_from_aotd.png) |
+| Combined maximum | ![Combined std overview](figures/expected_std_overview_from_woa23_and_aotd.png) | ![Combined RMSE overview](figures/expected_rmse_overview_from_woa23_and_aotd.png) |
 
-## 4. Bias and reference differences
+## 4. Mean offsets and reference sensitivity
 
-{fig("bias_maps_from_woa23.png", "**Figure 3. Mean offset (observations − WOA23) at 10, 100 and 1500 m.** Colour range is the 98th percentile of |bias|.")}
+{fig("bias_maps_from_woa23.png", "**Figure 3. Mean observation-minus-WOA23 offsets at 10, 100 and 1500 m.** Each symmetric colour range is set by the 98th percentile of the absolute cell offset.")}
 {bias_table()}
 
-{fig("product_difference_maps.png", "**Figure 4. RMSE from the AOTD reference minus RMSE from WOA23.** Blue: the AOTD climatology fits the data better. The AOTD reference tends to give smaller spread, which is why the combined product (max) is usually close to WOA23.")}
-## 5. Data coverage
+{fig("product_difference_maps.png", "**Figure 4. AOTD-based RMSE minus WOA23-based RMSE where both metrics exist.** Blue denotes a smaller empirical AOTD-based RMSE, not independent validation of AOTD. Even within a shared output cell, the contributing observations can differ because the reference masks differ.")}
+## 5. Available comparisons
 
-{fig("counts_vs_depth.png", "**Figure 5. Values used, cells with data, and the percentage of sparse cells (n < 5, n < 30) versus depth.**")}
+{fig("counts_vs_depth.png", "**Figure 5. WOA23-based potential-temperature comparison counts versus depth.** Panels show total finite differences, cells with data, and sparse-cell percentages conditional on n > 0. These counts need not describe salinity or the other products.")}
 {counts_table()}
 
-Statistics in cells with few values are noisy; the deep ocean (> 800 m) is especially sparse, and values at a given cell are not independent samples
-(drifting platforms and repeated ship sections are correlated).
+Sparse cells have poorly constrained statistics; a singleton's zero std does not imply
+zero physical variability. Repeated measurements along tracks or sections can be
+correlated, so larger n does not guarantee proportionally more independent information.
 
-## 6. Interpretation and caveats
+## 6. Interpretation and limitations
 
-* The spread is a property of the data–reference mismatch, so it includes real variability (mesoscale, seasonal timing, interannual change and trends), the reference's own error, and observational noise.
-* RMSE exceeds std where the climatology is biased relative to the pooled 1992–2023 data (see Figure 3), mostly on shelves and in the upper ocean.
-* The AOTD reference is only defined to 1500 m, and ten of its twelve published months show a deep-salinity anomaly relative to WOA23; treat the `aotd` and `woa23_and_aotd` products with that in mind.
-* Potential temperature was computed from the in situ T and S (UNESCO 1983, reference 0 dbar); differences from in situ-T statistics are small (< 0.002 °C median).
+* Mismatch combines observational uncertainty, unresolved spatial and temporal
+  variability, interannual change, trends, and reference limitations. This analysis
+  does not identify their individual contributions.
+* For a single reference and the same samples, RMSE² = std² + bias². This identity
+  need not hold across the separately selected combined std and RMSE products.
+* AOTD scatter and climatology share source data; the extent of overlap with WOA23
+  is not established here. Smaller mismatch is not an out-of-sample skill estimate.
+* Reference lookup uses a 0.25° cell without spatial or temporal interpolation.
+  AOTD is mapped to WOA23 centres under an adopted grid-alignment assumption.
+* The [climatology comparison](../woa_compare/woa_compare_report.md) documents a
+  marked deep-salinity disagreement in ten AOTD months. It warrants investigation
+  but does not independently establish which reference is correct.
+* Applying these pooled spreads to assimilation or prediction requires additional
+  validation, sampling safeguards and a treatment of correlated errors.
 
-## 7. Files
+## 7. Data and provenance
 
-`figures/` holds all figures; `tables/level_statistics.csv` has median and 10/90th percentiles of every metric at every depth level and product.
+[Level statistics](tables/level_statistics.csv) contains finite-cell counts, medians
+and P10/P90 for each level and product. Its `bias` rows use the **RMSE file's** bias
+field, including for the combined product; the combined std file may contain another
+reference's bias. The figures are generated by `scripts/04_make_plots.py`.
 
-`outputs/expected_spread/expected_{{std,rmse}}_from_{{woa23,aotd,woa23_and_aotd}}_{{potential_temperature,salinity}}_ease2_100km.nc` (12 files; not tracked in git, regenerate with `scripts/03_compute_expected_spread.py`).
-Variables: `<Theta|S>_<std|rmse>`, `<…>_bias`, `<…>_n`, `lat`, `lon`.
+NetCDF products follow
+`expected_{{std,rmse}}_from_{{woa23,aotd,woa23_and_aotd}}_{{potential_temperature,salinity}}_ease2_100km.nc`
+in `outputs/expected_spread/` (12 files). Each contains the metric, bias, n, coordinates
+and CRS metadata; regenerate them with `scripts/03_compute_expected_spread.py`.
+
+Source credit: Li, J., Wu, X. & Wang, X. (2025), *An Arctic Ocean Thermohaline Dataset*,
+[doi:10.1038/s41597-025-05855-3](https://doi.org/10.1038/s41597-025-05855-3);
+AOTD scatter (CC BY 4.0),
+[doi:10.6084/m9.figshare.28825490.v1](https://doi.org/10.6084/m9.figshare.28825490.v1);
+AOTD climatology,
+[doi:10.6084/m9.figshare.27645738.v1](https://doi.org/10.6084/m9.figshare.27645738.v1).
+WOA23 temperature and salinity are NOAA NCEI products; full references are in the
+[technical note](../../technical_note.md#references).
 """
-os.makedirs("reports/expected_spread/tables", exist_ok=True)
-with open("reports/expected_spread/tables/level_statistics.csv", "w") as fh:
-    fh.write("variable,metric,product,depth_m,cells_with_data,median,p10,p90\n")
-    for v in NAMES:
-        for kind in ("rmse", "std", "bias"):
-            for p in PRODS:
-                ds = load("rmse" if kind == "bias" else kind, p, v)
-                f = ds[f"{v}_{kind}"].values; n = ds[f"{v}_n"].values
-                for k, d in enumerate(ds.depth.values):
-                    g = f[k][np.isfinite(f[k])]
-                    if g.size:
-                        fh.write(f"{v},{kind},{p},{d:g},{g.size},{np.median(g):.6g},{np.percentile(g, 10):.6g},{np.percentile(g, 90):.6g}\n")
-open(OUT, "w").write(text)
-print("wrote", OUT)
+
+
+def write_statistics():
+    with (OUT.parent / "tables/level_statistics.csv").open("w", encoding="utf-8") as fh:
+        fh.write("variable,metric,product,depth_m,cells_with_data,median,p10,p90\n")
+        for v in NAMES:
+            for kind in ("rmse", "std", "bias"):
+                for p in PRODS:
+                    with load("rmse" if kind == "bias" else kind, p, v) as ds:
+                        f = ds[f"{v}_{kind}"].values
+                        for k, d in enumerate(ds.depth.values):
+                            g = f[k][np.isfinite(f[k])]
+                            if g.size:
+                                fh.write(f"{v},{kind},{p},{d:g},{g.size},{np.median(g):.6g},"
+                                         f"{np.percentile(g, 10):.6g},{np.percentile(g, 90):.6g}\n")
+
+
+def main():
+    (OUT.parent / "tables").mkdir(parents=True, exist_ok=True)
+    text = report()
+    write_statistics()
+    OUT.write_text(text, encoding="utf-8")
+    print("wrote", OUT)
+
+
+if __name__ == "__main__":
+    main()

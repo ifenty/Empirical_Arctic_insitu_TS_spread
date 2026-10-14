@@ -1,72 +1,128 @@
-# Expected spread of Arctic in situ temperature and salinity
+# empirical Arctic in situ temperature and salinity profile spread relative to climatologies
 
-**Goal:** estimate how much individual in situ profile values of potential temperature and salinity are expected to scatter around reference monthly climatologies (WOA23 and the published AOTD climatology) in the Arctic Ocean, as a function of location (EASE-Grid 2.0 North, 100 km) and depth (the 102 WOA standard levels). The estimates are data-honest (NaN where there is no observation), are provided as expected **RMSE** and expected **standard deviation**, and are computed against three references: WOA23, the published AOTD climatology, and the larger of the two.
+This repository summarizes Arctic in situ temperature and salinity differences from
+two published reference climatologies: WOA23 and AOTD. It produces per-cell **empirical
+RMSE, population standard deviation, mean offset and comparison count**, on a 100 km
+EASE-Grid 2.0 North grid (EPSG:6931) at 102 WOA standard depths.
 
-The method, data, provenance and limitations are described in **[`technical_note.md`](technical_note.md)**.
+The analysis pools profiles from 1992 onward, comparing each value with its monthly
+reference (seasonal WOA23 below 1500 m). Missing comparisons remain NaN; no spatial
+gap filling is applied. A third product takes the larger finite metric from the two
+references. This maximum is a sensitivity envelope, **not a calibrated confidence
+bound**. The spreads include natural variability and reference mismatch as well as
+observational uncertainty; they are not independently validated observation-error or
+forecast-uncertainty estimates.
 
-## Data and credit
-The scattered profiles are the AOTD *scatter* dataset provided by the authors of the Arctic Ocean Thermohaline Dataset:
+## Documentation and results
 
-> Li, J., Wu, X. & Wang, X. An Arctic Ocean Thermohaline Dataset. *Scientific Data* 12, 1607 (2025). https://doi.org/10.1038/s41597-025-05855-3
-> Li, J. AOTD_scatter. figshare (2025). https://doi.org/10.6084/m9.figshare.28825490.v1 (CC BY 4.0)
+* [Technical note](technical_note.md): data, formulas, assumptions and limitations.
+* [Empirical-spread report](reports/expected_spread/expected_spread_report.md):
+  depth summaries, maps, offsets and sampling counts.
+* [Climatology comparison](reports/woa_compare/woa_compare_report.md):
+  published AOTD versus WOA23, including grid-alignment diagnostics.
+* [Scatter-data report](reports/scatter/scatter_report.md):
+  profile coverage and exploratory, unvalidated sampling classifications.
 
-Reference climatologies: WOA23 decadal (1991-2020) 0.25° monthly and seasonal T and S, NOAA NCEI; and the published AOTD monthly climatology, https://doi.org/10.6084/m9.figshare.27645738.v1.
+Reports distinguish measured differences from possible explanations. AOTD scatter
+and climatology share input data; overlap with WOA23 is not quantified here, so the
+comparisons are not independent holdout validation.
 
-## Reproduce
-Requirements: internet access, about 20 GB free disk (WOA23 files are large), about 4 GB RAM, and **a Python (>= 3.10) environment with every package listed in `requirements.txt`** (numpy, scipy, pandas, xarray, netCDF4, pyproj, matplotlib, cartopy; gsw and pytest are only for the tests). The scripts will fail with `ImportError` if any is missing, so create the environment first.
+## Data and attribution
 
-### 1. Create the Python environment
-Option A: venv + pip (works for people and automated agents; run from the repo root):
+The AOTD authors provided the scattered profiles and published climatology:
+
+* Li, J., Wu, X. & Wang, X. (2025). *An Arctic Ocean Thermohaline Dataset*.
+  *Scientific Data* 12, 1607.
+  [doi:10.1038/s41597-025-05855-3](https://doi.org/10.1038/s41597-025-05855-3).
+* Li, J. (2025). *AOTD_scatter*, figshare, version 1 (CC BY 4.0).
+  [doi:10.6084/m9.figshare.28825490.v1](https://doi.org/10.6084/m9.figshare.28825490.v1).
+* Li, J. (2024). *An Arctic Ocean Thermohaline Dataset*, published climatology,
+  figshare, version 1.
+  [doi:10.6084/m9.figshare.27645738.v1](https://doi.org/10.6084/m9.figshare.27645738.v1).
+
+WOA23 reference fields are NOAA NCEI's 1991–2020 (`decav91C0`) 0.25° objectively
+analysed monthly and seasonal temperature and salinity:
+[World Ocean Atlas](https://www.ncei.noaa.gov/products/world-ocean-atlas).
+Full scientific references are in the [technical note](technical_note.md#references).
+
+## Reproduction
+
+Run commands from the repository root. Use Python ≥ 3.10 and all packages in
+[`requirements.txt`](requirements.txt). Initial downloads require internet access.
+Plan for **at least 30 GB of free disk space and several gigabytes of RAM**, with
+more space if retaining additional archives or caches. Runtime, peak memory and
+storage use depend on the machine and available inputs.
+
+### 1. Install dependencies
+
 ```bash
-git clone https://github.com/ifenty/AOTD_v2.git && cd AOTD_v2
 python3 -m venv .venv
-source .venv/bin/activate          # every new shell needs this, or call .venv/bin/python directly
-pip install --upgrade pip
-pip install -r requirements.txt
-python -c "import numpy, scipy, pandas, xarray, netCDF4, pyproj, matplotlib, cartopy; print('environment OK')"
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -r requirements.txt
 ```
-Option B: conda/mamba:
+
+Cartopy and netCDF4 require compiled dependencies; if suitable wheels are unavailable,
+use a conda-forge environment or install the appropriate system libraries.
+`gsw` provides the potential-temperature test reference; `pytest` runs the tests.
+
+### 2. Run the pipeline
+
 ```bash
-conda create -n aotd_spread -c conda-forge python=3.12 --file requirements.txt
-conda activate aotd_spread
-```
-(Cartopy and netCDF4 need compiled libraries; if `pip install` fails on Linux, use Option B or install the system packages `libgeos-dev libproj-dev libnetcdf-dev`.)
-Automated agents: no shell state persists between commands, so prefix commands with `.venv/bin/python` (or set `PYTHON=.venv/bin/python` for `run_all.sh`) instead of relying on `activate`.
-
-### 2. Run
-```bash
-./run_all.sh            # runs scripts 01-06 (and 07 if data/ease2 exists); the download takes the longest; uses $PYTHON, default `python`
+PYTHON=.venv/bin/python ./run_all.sh
 ```
 
-Or step by step (always from the repo root):
+The runner executes scripts 01–06. Script 07 also runs when the required NSIDC files
+are available in `data/ease2/`; those ancillary files are not downloaded automatically.
+Downloads can be rerun to reuse verified local files.
 
-| script | command | what it does | output |
+To run individual stages, use `.venv/bin/python scripts/<filename>`:
+
+| stage | filename | purpose | output |
 |---|---|---|---|
-| 01 | `python scripts/01_download_data.py` | downloads AOTD scatter + climatology (figshare) and WOA23 monthly/seasonal T, S (NCEI); resumable | `data/` |
-| 02 | `python scripts/02_prepare_scatter.py` | concatenates yearly scatter files, normalises missing values | `data/scatter_all.npz` |
-| 03 | `python scripts/03_compute_expected_spread.py` | deviations from the references in potential temperature and salinity, per-cell std/RMSE/bias/n, 3 products (about 1.5 min) | `outputs/expected_spread/*.nc` (12 files) |
-| 04 | `python scripts/04_make_plots.py` | maps at 10/100/1500 m, log10 profile counts, median spread and counts vs depth, for each statistic and product | `reports/expected_spread/figures/*.png` (11 files) |
-| 05 | `python scripts/05_report_expected_spread.py` | writes the expected-spread report (tables and captioned figures from 03/04) | `reports/expected_spread/expected_spread_report.md` |
+| 01 | `01_download_data.py` | Download AOTD scatter/climatology and WOA23 monthly/seasonal T and S | `data/` |
+| 02 | `02_prepare_scatter.py` | Concatenate annual profiles and normalize missing values | `data/scatter_all.npz` |
+| 03 | `03_compute_expected_spread.py` | Compute potential-temperature and salinity differences, then cellwise statistics | `outputs/expected_spread/` (12 NetCDF files) |
+| 04 | `04_make_plots.py` | Map metrics, mean offsets and counts; summarize depth dependence | `reports/expected_spread/figures/` |
+| 05 | `05_report_expected_spread.py` | Regenerate the spread report and summary CSV from stage 03 products | `reports/expected_spread/` |
+| 06 | `06_report_aotd_vs_woa23.py` | Compare reference climatologies; regenerate report, tables and maps | `reports/woa_compare/`, cache in `outputs/woa/` |
+| 07 | `07_report_scatter_data.py` | Describe profile sampling and exploratory classifications | `reports/scatter/` |
 
-Further reports (not needed for the products; 06 is run by `run_all.sh`, 07 only if `data/ease2/` exists):
+Stage 07 additionally needs NSIDC EASE-Grid 2.0 North 25 km latitude/longitude files
+(NSIDC-0772) and a LOCI land mask (NSIDC-0609) in `data/ease2/`. Access requires a
+free NASA Earthdata account. The expected filenames are
+`NSIDC0772_LatLon_EASE2_N25km_v1.1.nc` and
+`EASE2_N25km.LOCImask_land50_coast0km.720x720.bin`.
+Stages 05 and 06 can be rerun without recomputing the
+spread products, provided their inputs exist; stage 05 also links figures from 04.
 
-| script | what it does | output |
-|---|---|---|
-| `python scripts/06_report_aotd_vs_woa23.py` | report comparing the published AOTD climatology with WOA23, the two references (RMSE, bias, maps) | `reports/woa_compare/woa_compare_report.md` |
-| `python scripts/07_report_scatter_data.py` | report describing the scattered profiles (coverage, time, platform classes inferred heuristically). Needs the NSIDC EASE-Grid 2.0 N 25 km files in `data/ease2/` (NSIDC-0772 lat/lon, NSIDC-0609 LOCI land mask; free NASA Earthdata login, not downloaded automatically) | `reports/scatter/scatter_report.md` |
+```bash
+.venv/bin/python -m pytest tests
+```
 
-Each `reports/<name>/` folder has the report `.md`, `figures/` and `tables/`.
+## Product format
 
-Tests: `pytest tests`.
+Files in `outputs/expected_spread/` follow this pattern:
 
-## Output files
-`outputs/expected_spread/expected_{std,rmse}_from_{woa23,aotd,woa23_and_aotd}_{potential_temperature,salinity}_ease2_100km.nc`; dimensions `(depth 102, y 180, x 180)`, variables `Theta_*` or `S_*` for `std`/`rmse`, plus `*_bias`, `*_n`, 2-D `lat`/`lon` and the EPSG:6931 `crs`. NaN means no observation. See the technical note for definitions.
+```text
+expected_{std,rmse}_from_{woa23,aotd,woa23_and_aotd}_{potential_temperature,salinity}_ease2_100km.nc
+```
 
-## Layout
-- `scripts/01..07_*.py` pipeline and diagnostics (above); `run_all.sh`
-- `scripts/scatter_io.py` (loading the scatter files) and `scripts/potential_temperature.py` (UNESCO 1983 potential temperature): helper modules imported by the scripts
-- `technical_note.md` technical note; `reports/` figures and reports; `tests/`
-- `data/` (incl. `data/aotd_climatology/`, `data/woa23_raw/`, `data/scatter/`) and `outputs/` are generated and untracked
+Dimensions are `(depth=102, y=180, x=180)`. Variables are `Theta_std`/`Theta_rmse`
+or `S_std`/`S_rmse`, plus the associated `*_bias`, `*_n`, geographic coordinates and
+EPSG:6931 CRS metadata. AOTD comparisons exist only at 0–1500 m; below that, the
+combined product equals WOA23. Its bias and count fields follow the reference
+selected for **that file's metric**; std and RMSE can select different references.
+Counts are not effective independent sample sizes, and a singleton has zero
+population std. See the [technical note](technical_note.md#3-calculation) before use.
 
-## History
-This repository began as an attempt to reproduce the AOTD climatology from the authors' released MATLAB code. That code proved incomplete (only two of twelve published monthly files could be reproduced) and a replacement optimal-interpolation climatology did not improve on WOA23, so the project was refocused on the in situ spread. The reproduction and OI code was removed; it is available in the git history before the commit "Refocus repository on in situ spread estimation".
+## Repository layout and scope
+
+`scripts/01..07_*.py` implement the pipeline and diagnostics. `scatter_io.py` handles
+profile loading; `potential_temperature.py` implements the UNESCO surface-referenced
+temperature conversion. `reports/` contains report text, tables and figures;
+`tests/` contains validation checks. Downloaded `data/` and computed `outputs/` are
+generated locally and are not tracked.
+
+Earlier climatology-reproduction and optimal-interpolation experiments remain in
+the git history. The current project focuses on empirical profile–reference spread,
+not reconstruction of the published AOTD analysis.

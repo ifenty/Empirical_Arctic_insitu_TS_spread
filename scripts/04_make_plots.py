@@ -6,7 +6,6 @@
   counts_vs_depth.png                                 number of values, cells with data, fraction of sparse cells
 Usage (from the repo root): python scripts/04_make_plots.py
 """
-import warnings
 import os
 import numpy as np
 import xarray as xr
@@ -14,15 +13,28 @@ import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs, cartopy.feature as cf
 
-warnings.simplefilter("ignore")
 D = "outputs/expected_spread"
 LEVELS = (2, 20, 56)
 tr = ccrs.PlateCarree()
 VARS = (("Theta", "potential_temperature"), ("S", "salinity"))
 
 
+def cell_percentiles(values, percentiles):
+    values = values.reshape(len(values), -1)
+    supported = np.isfinite(values).any(axis=1)
+    result = np.full((len(percentiles), len(values)), np.nan)
+    result[:, supported] = np.nanpercentile(values[supported], percentiles, axis=1)
+    return result
+
+
+def rmse_std_ratio(rmse, std, rmse_n, std_n):
+    ratio = np.full_like(rmse, np.nan, dtype="float64")
+    np.divide(rmse, std, out=ratio, where=(rmse_n >= 5) & (std_n >= 5) & (std > 0))
+    return ratio
+
+
 def make(kind, prod):
-    ds = {v: xr.open_dataset(f"{D}/expected_{kind}_from_{prod}_{nm}_ease2_100km.nc") for v, nm in VARS}
+    ds = {v: load(kind, prod, v) for v, _ in VARS}
     dep = ds["Theta"].depth.values
     lat, lon = ds["Theta"].lat.values, ds["Theta"].lon.values
     same_n = bool(np.array_equal(ds["Theta"]["Theta_n"].values, ds["S"]["S_n"].values))
@@ -31,6 +43,7 @@ def make(kind, prod):
         rows.append(("S_n", "S", "viridis", "log10 N"))
     nr = len(rows) + 1
     fig = plt.figure(figsize=(14, 15))
+    grid = fig.add_gridspec(nr, 6)
     for r, (var, v, cmap, lab) in enumerate(rows):
         a = ds[v][var].values.astype("float64")
         for c, k in enumerate(LEVELS):
@@ -40,17 +53,17 @@ def make(kind, prod):
                 vmin, vmax = 0, (np.nanmax(f) if np.isfinite(f).any() else 1)
             else:
                 vmin, vmax = 0, (np.nanpercentile(f, 98) if np.isfinite(f).any() else 1)
-            ax = fig.add_subplot(nr, 3, 3 * r + c + 1, projection=ccrs.NorthPolarStereo()); ax.set_extent([-180, 180, 62, 90], tr)
+            ax = fig.add_subplot(grid[r, 2 * c:2 * c + 2], projection=ccrs.NorthPolarStereo()); ax.set_extent([-180, 180, 62, 90], tr)
             m = ax.pcolormesh(lon, lat, f, transform=tr, cmap=cmap, vmin=vmin, vmax=vmax, shading="auto", rasterized=True)
             ax.add_feature(cf.LAND, facecolor=".85"); ax.coastlines(lw=.3)
             ax.set_title(f"[{kind} from {prod}] {var if not lab else 'log10 N (' + v + ')'} at {dep[k]:.0f} m", fontsize=8)
             cb = fig.colorbar(m, ax=ax, shrink=.7); cb.ax.tick_params(labelsize=7)
-    ax1 = fig.add_subplot(nr, 2, 2 * nr - 1)
+    ax1 = fig.add_subplot(grid[-1, :3])
     for v, _ in VARS:
         s = ds[v][f"{v}_{kind}"].values.reshape(len(dep), -1)
-        ax1.plot(dep, np.nanmedian(s, axis=1), label=f"{v}_{kind}, median over cells")
+        ax1.plot(dep, cell_percentiles(s, (50,))[0], label=f"{v}_{kind}, median over cells")
     ax1.set_xscale("symlog", linthresh=50); ax1.set_xlim(0, 5500); ax1.set_xlabel("depth (m)"); ax1.legend(fontsize=8); ax1.grid(alpha=.3)
-    ax2 = fig.add_subplot(nr, 2, 2 * nr)
+    ax2 = fig.add_subplot(grid[-1, 3:])
     n = ds["Theta"]["Theta_n"].values.reshape(len(dep), -1)
     ax2.plot(dep, np.maximum(n.sum(1), 1), label="profiles (all cells)")
     ax2.plot(dep, np.maximum((n > 0).sum(1), 1), label="cells with data")
@@ -58,12 +71,6 @@ def make(kind, prod):
     fig.tight_layout(); fig.savefig(f"reports/expected_spread/figures/expected_{kind}_overview_from_{prod}.png", dpi=90); plt.close(fig)
 
 
-for kind in ("std", "rmse"):
-    for prod in ("woa23", "aotd", "woa23_and_aotd"):
-        make(kind, prod)
-
-
-os.makedirs("reports/expected_spread/figures", exist_ok=True)
 PRODS = ("woa23", "aotd", "woa23_and_aotd")
 COL = {"woa23": "C0", "aotd": "C3", "woa23_and_aotd": "k"}
 NAMES = {"Theta": "potential_temperature", "S": "salinity"}
@@ -72,7 +79,8 @@ OUTD = "reports/expected_spread/figures"
 
 
 def load(kind, prod, v):
-    return xr.open_dataset(f"{D}/expected_{kind}_from_{prod}_{NAMES[v]}_ease2_100km.nc")
+    with xr.open_dataset(f"{D}/expected_{kind}_from_{prod}_{NAMES[v]}_ease2_100km.nc") as ds:
+        return ds.load()
 
 
 def polar_axes(fig, nr, nc, i):
@@ -93,12 +101,12 @@ def vs_depth(full):
             a = ax[r, c]
             for p in (("woa23",) if full else PRODS):
                 if k == "ratio":
-                    nn = load("rmse", p, v)[f"{v}_n"].values
-                    f = np.where((nn >= 5) & (data[("std", p)] > 0), data[("rmse", p)] / data[("std", p)], np.nan)
+                    rmse_n = load("rmse", p, v)[f"{v}_n"].values
+                    std_n = load("std", p, v)[f"{v}_n"].values
+                    f = rmse_std_ratio(data[("rmse", p)], data[("std", p)], rmse_n, std_n)
                 else:
                     f = data[(k, p)]
-                f = f.reshape(len(dep), -1)
-                med = np.nanmedian(f, axis=1); lo, hi = np.nanpercentile(f, 10, axis=1), np.nanpercentile(f, 90, axis=1)
+                lo, med, hi = cell_percentiles(f, (10, 50, 90))
                 a.plot(med, dep, color=COL[p], label=f"from {p}" + (" (median)" if p == "woa23" else ""))
                 if p == "woa23":
                     a.fill_betweenx(dep, lo, hi, color=COL[p], alpha=.15, label="10-90% of cells")
@@ -106,7 +114,7 @@ def vs_depth(full):
             if full:
                 a.set_yscale("symlog", linthresh=100); a.set_ylim(5500, 0)
             a.set_xlabel({"rmse": f"expected RMSE ({UNIT[v]})", "std": f"expected std ({UNIT[v]})", "ratio": "RMSE / std"}[k])
-            a.set_title(f"{v}: " + {"rmse": "RMSE", "std": "std", "ratio": "RMSE / std (cells with n >= 5)"}[k], fontsize=10); a.grid(alpha=.3)
+            a.set_title(f"{v}: " + {"rmse": "RMSE", "std": "std", "ratio": "RMSE / std (both counts >= 5)"}[k], fontsize=10); a.grid(alpha=.3)
             if k == "ratio":
                 a.set_xlim(1, 3)
             else:
@@ -156,5 +164,14 @@ def counts_vs_depth():
     fig.tight_layout(); fig.savefig(f"{OUTD}/counts_vs_depth.png", dpi=90); plt.close(fig)
 
 
-vs_depth(False); vs_depth(True); bias_maps(); product_difference_maps(); counts_vs_depth()
-print("figures written to", OUTD)
+def main():
+    os.makedirs(OUTD, exist_ok=True)
+    for kind in ("std", "rmse"):
+        for prod in PRODS:
+            make(kind, prod)
+    vs_depth(False); vs_depth(True); bias_maps(); product_difference_maps(); counts_vs_depth()
+    print("figures written to", OUTD)
+
+
+if __name__ == "__main__":
+    main()

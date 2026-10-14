@@ -3,14 +3,15 @@
 
 Run from the repo root:  python scripts/07_report_scatter_data.py   (optional diagnostic; needs the NSIDC EASE2 25 km ancillary files in data/ease2, see README)
 Writes ONLY to reports/scatter/ (md report, figures/*.png, tables/*.csv).
-Every number in the markdown is computed here; provenance classes are INFERRED heuristics.
+Diagnostic counts are computed here; source attribution is external to the arrays.
+Sampling-pattern classes and coverage ratings are unvalidated heuristics.
 """
 import datetime as dtm
 import hashlib
+import importlib.metadata
 import os
 import sys
 import time
-import warnings
 from pathlib import Path
 
 import matplotlib
@@ -27,7 +28,6 @@ from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial import cKDTree
 
-warnings.filterwarnings("ignore")
 ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
 OUT = ROOT / "reports" / "scatter"
@@ -54,7 +54,7 @@ TABLES_WRITTEN = []
 def savefig(fig, name, caption=None):
     fig.savefig(FIG / f"{name}.png", bbox_inches="tight")
     plt.close(fig)
-    return f"![{caption or name}](figures/{name}.png)\n"
+    return f"![{caption or name}](figures/{name}.png)\n\n*Figure: {caption or name}.*\n"
 
 
 def savetab(df, name, index=False):
@@ -63,7 +63,7 @@ def savetab(df, name, index=False):
 
 
 def fmtv(v, dec):
-    if v is None or (isinstance(v, float) and np.isnan(v)):
+    if v is None or pd.isna(v):
         return "–"
     if isinstance(v, (int, np.integer)):
         return f"{v:,}"
@@ -77,12 +77,17 @@ def mdtable(df, dec=2, index=False):
         df = df.reset_index()
     cols = list(df.columns)
     decs = dec if isinstance(dec, dict) else {}
-    lines = ["| " + " | ".join(str(c) for c in cols) + " |", "|" + "|".join("---" for _ in cols) + "|"]
-    for _, r in df.iterrows():
+    def escape(value):
+        return str(value).replace("|", "\\|").replace("\n", "<br>")
+
+    lines = ["| " + " | ".join(escape(c) for c in cols) + " |", "|" + "|".join("---" for _ in cols) + "|"]
+    for r in df.itertuples(index=False, name=None):
         cells = []
-        for c in cols:
+        for c, value in zip(cols, r):
             d = decs.get(c, dec if not isinstance(dec, dict) else 2)
-            cells.append(fmtv(r[c], d))
+            formatted = (str(int(value)) if c in {"year", "first year", "year_first", "year_last"} and pd.notna(value)
+                         else fmtv(value, d))
+            cells.append(escape(formatted))
         lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines) + "\n"
 
@@ -100,6 +105,7 @@ def add(sec, *txt):
 log("loading data")
 NPZ = ROOT / "data" / "scatter_all.npz"
 if NPZ.exists():
+    INPUT_FILES = [NPZ]
     z = np.load(NPZ)
     lat = z["lat"].astype("float64")
     lon = z["lon"].astype("float64")
@@ -111,6 +117,7 @@ if NPZ.exists():
     depth = z["depth"].astype("float64")
     year = z["year"].astype(int)
     month = z["month"].astype(int)
+    z.close()
 else:
     from scatter_io import load_scatter
 
@@ -119,6 +126,7 @@ else:
     tsec = d["time"].astype("datetime64[s]").astype("int64")
     T, S, P, DN, depth = d["temp"], d["salt"], d["pres"], d["dens"], d["depth"]
     year, month = d["year"], d["month"]
+    INPUT_FILES = sorted((ROOT / "data" / "scatter").glob("AOTD*.nc"))
 N, NZ = T.shape
 tdays = tsec / 86400.0
 vT = ~np.isnan(T)
@@ -156,7 +164,7 @@ PROJ_CRS = pyproj.CRS.from_epsg(6931)
 TR = pyproj.Transformer.from_crs("EPSG:4326", PROJ_CRS, always_xy=True)
 EDIR = ROOT / "data" / "ease2"
 # land mask: uint8 720x720, rows top (y decreasing) to bottom. Verified against the shipped PNG and the profile positions:
-# 255 = ocean/water, 0 = land, 101 = Greenland ice sheet / land-ice, 254 = off-earth (the brief had 0 and 255 swapped)
+# 255 = ocean/water, 0 = land, 101 = Greenland ice sheet / land-ice, 254 = off-earth.
 LMASK = np.fromfile(EDIR / "EASE2_N25km.LOCImask_land50_coast0km.720x720.bin", dtype="uint8").reshape(720, 720)
 _l = xr.open_dataset(EDIR / "NSIDC0772_LatLon_EASE2_N25km_v1.1.nc")
 ELAT = _l["latitude"].values
@@ -199,12 +207,29 @@ def bcount(mask=None, idx=None):
 def ndistinct(values, mask=None):
     c = cell if mask is None else cell[mask]
     v = values if mask is None else values[mask]
-    u = np.unique(c.astype(np.int64) * 10000 + v)
-    return np.bincount(u // 10000, minlength=NC)
+    pairs = np.unique(np.column_stack((c, v)), axis=0)
+    return np.bincount(pairs[:, 0].astype(np.int64), minlength=NC)
+
+
+def ocean_grid_coverage(counts, ocean, threshold=1):
+    """Fraction of ocean-mask cells meeting the count threshold (not area-weighted)."""
+    return float(((counts >= threshold) & ocean).sum() / ocean.sum())
+
+
+def level_mean_std(arr):
+    """Population moments per level, retaining NaN for unobserved levels."""
+    count = (~np.isnan(arr)).sum(axis=0)
+    dtype = np.result_type(arr.dtype, np.float32)
+    mean = np.full(arr.shape[1], np.nan, dtype=dtype)
+    np.divide(np.nansum(arr, axis=0), count, out=mean, where=count > 0)
+    variance = np.full(arr.shape[1], np.nan, dtype=dtype)
+    np.divide(np.nansum((arr - mean) ** 2, axis=0), count, out=variance, where=count > 0)
+    return mean, np.sqrt(variance)
 
 
 # WOA23 0.25 deg mask: only used for the lat/lon-grid tables in section 3e
-_w = xr.open_dataset(ROOT / "data/woa23_raw/woa23_decav91C0_t00_04.nc", decode_times=False)
+WOA_MASK_FILE = ROOT / "data/woa23_raw/woa23_decav91C0_t00_04.nc"
+_w = xr.open_dataset(WOA_MASK_FILE, decode_times=False)
 _wl = _w["lat"].values
 _sel = _wl >= 60
 WLAT = _wl[_sel]
@@ -245,7 +270,7 @@ def polar_ax(fig, nr, nc, k, title=None, lat_min=60):
     th = np.linspace(0, 2 * np.pi, 120)
     circ = mpath.Path(np.vstack([np.sin(th), np.cos(th)]).T * 0.5 + 0.5)
     ax.set_boundary(circ, transform=ax.transAxes)
-    # land from the EASE2 land mask (values 101 and 255)
+    # Land and land ice are codes 0 and 101; code 255 is water.
     ax.pcolormesh(ece, ece, _LAND_PLOT, cmap=matplotlib.colors.ListedColormap(["0.8"]), transform=MAPCRS, zorder=1,
                   rasterized=True)
     ax.gridlines(draw_labels=False, linewidth=0.3, color="k", alpha=0.4, linestyle=":",
@@ -353,12 +378,14 @@ for th in (100, 300, 700, 1000, 1500, 2000, 3000):
 axs[2].set_xlabel("depth z (m)")
 axs[2].set_ylabel("% of profiles with valid T at z or deeper")
 axs[2].set_title("(c) fraction of profiles reaching depth z")
-f1 = savefig(fig, "s1_levels_and_maxdepth", "Distribution of levels per profile and maximum depth")
+f1 = savefig(fig, "s1_levels_and_maxdepth",
+             "Profile completeness and deepest non-missing temperature level; the exceedance curve describes depth reach, not continuous coverage")
 
 add(1, "## 1. Overview of the profile data\n",
     f"The scatter files hold **{N:,}** profiles from {K['year_min']} to {K['year_max']}, each on the {NZ} WOA standard "
     f"depths (0-{int(depth[-1])} m). Counts below refer to a profile as having a *valid T* if at least one level is "
-    f"non-NaN.\n",
+    f"non-NaN. Here *valid* means present after missing-value normalisation, not verified by an independent quality assessment. "
+    f"A profile is one published record; a level-value is one temperature or salinity entry at a standard depth.\n",
     mdtable(pd.DataFrame([
         ["Profiles in total", f"{N:,}", "100%"],
         ["Profiles with valid T", f"{hasT.sum():,}", pct(hasT.sum(), N)],
@@ -379,9 +406,10 @@ add(1, "## 1. Overview of the profile data\n",
     ], columns=["quantity", "value", "share"])),
     "**Levels with valid T per profile**\n", mdtable(t_nlev, dec=2),
     "**Maximum valid depth** (deepest non-NaN T level; S analogous)\n", mdtable(t_md, dec=2),
-    "**Value ranges** (valid cells only)\n", mdtable(t_rng, dec=3),
+    "**Value ranges** (non-missing level-values; percentiles and population standard deviation)\n", mdtable(t_rng, dec=3),
     f1,
-    f"*Reading:* about {pct(K['nan_frac_T'], 1, 0)} of all T cells are NaN because most profiles are shallow; only "
+    f"**Interpretation.** About {pct(K['nan_frac_T'], 1, 0)} of all temperature entries on the standard-depth grid are missing. "
+    f"This reflects limited depth reach and missing levels, not an estimated rejection rate. Only "
     f"{pct(md_frac[1000], 1)} of profiles with T reach 1000 m and {pct(md_frac[2000], 1)} reach 2000 m. "
     f"Profiles reaching 5500 m: {int((maxdepth >= 5500).sum()):,}.\n")
 log("section 1 done")
@@ -482,7 +510,8 @@ ax.set_ylabel("year")
 ax.set_title("(d) profiles north of 80N per year x month")
 ax.grid(False)
 fig.colorbar(im, ax=ax, label="profiles")
-f2 = savefig(fig, "s2_time_distribution", "Temporal distribution of profiles")
+f2 = savefig(fig, "s2_time_distribution",
+             "Profile counts by year, latitude band and calendar month; year-by-month panels use logarithmic colour scales")
 
 add(2, "## 2. Temporal distribution\n",
     f2,
@@ -492,13 +521,15 @@ add(2, "## 2. Temporal distribution\n",
     "**Profiles per month of year**\n", mdtable(t_month, dec=1),
     f"The full year table is `tables/s2_profiles_per_year.csv` and the year x month matrix is "
     f"`tables/s2_profiles_year_x_month.csv`.\n",
-    f"*Reading.* The record peaks in {pk} ({int(ycount.loc[pk]):,} profiles) and has its minimum in "
+    f"**Interpretation.** The record peaks in {pk} ({int(ycount.loc[pk]):,} profiles) and has its minimum in "
     f"{K['ymin_year']} ({K['ymin_n']:,}). Mean annual sampling is {pre05:,.0f} profiles/yr for 1983-2004 and "
     f"{post05:,.0f} profiles/yr for 2005-2023 (x{post05 / pre05:.1f}); {pct(share_post05, 1)} of all profiles are from "
-    f"2005 onward. The seasonal bias is strong: {pct(jas, 1)} of profiles fall in Jul-Sep against {pct(jfm, 1)} in "
-    f"Jan-Mar; north of 80N the ratio is {pct(jas80, 1)} vs {pct(jfm80, 1)} (the most-sampled month is {K['mmax']}, "
-    f"the least-sampled {K['mmin']}, ratio {K['mratio']:.1f}). The summer maximum is consistent with ship access to ice-covered "
-    f"water (see section 6 for the inferred platform types).\n")
+    f"2005 onward. Sampling is seasonally uneven: {pct(jas, 1)} of profiles fall in Jul-Sep against {pct(jfm, 1)} in "
+    f"Jan-Mar; north of 80N the corresponding shares are {pct(jas80, 1)} and {pct(jfm80, 1)}. "
+    f"Across all profiles, the most-sampled month is {K['mmax']} and the least-sampled is {K['mmin']} "
+    f"(count ratio {K['mratio']:.1f}). These are sampling distributions, not evidence of a particular platform, "
+    f"sea-ice mechanism or environmental trend. The four reporting periods are not equal in length: "
+    f"2013-2023 contains eleven years, the others ten. Quarters pool calendar months across years; DJF is not grouped into winter-years.\n")
 log("section 2 done")
 
 # ============================================================================= SECTION 3: space
@@ -514,7 +545,7 @@ def box_stats(c, label):
     d["median per occupied"] = float(np.median(c[occ])) if occ.any() else np.nan
     d["mean per occupied"] = float(c[occ].mean()) if occ.any() else np.nan
     d["max"] = int(c.max())
-    d["% ocean area with 0 profiles"] = 100 * (1 - area_frac(occ & OCEAN_BOX) / 1.0) if True else np.nan
+    d["% ocean area with 0 profiles"] = 100 * (1 - area_frac(occ & OCEAN_BOX))
     d["% ocean area with >=10"] = 100 * area_frac((c >= 10) & OCEAN_BOX)
     return d
 
@@ -562,7 +593,7 @@ fig = plt.figure(figsize=(7.5, 8))
 ax = polar_ax(fig, 1, 1, 1, "Profiles per 100 km x 100 km box (1983-2023)")
 m = box_pcolor(ax, grid2(cnt), norm=LogNorm(1, cnt.max()), cmap="viridis")
 cbar(fig, m, ax, "profiles per box (log)")
-f3a = savefig(fig, "s3a_box_counts_all", "Profile counts per 100 km box")
+f3a = savefig(fig, "s3a_box_counts_all", "Profiles per equal-area 100 km box over the full record; logarithmic colour scale")
 
 fig = plt.figure(figsize=(13, 13))
 axl = []
@@ -584,12 +615,13 @@ f3c = savefig(fig, "s3c_box_counts_by_season", "Profile counts per box by season
 
 fig = plt.figure(figsize=(14, 7.5))
 ax1 = polar_ax(fig, 1, 2, 1, "Number of distinct years sampled per box")
-m1 = box_pcolor(ax1, grid2(nyr).astype(float), norm=None, cmap="YlGnBu", vmin=1, vmax=41)
+m1 = box_pcolor(ax1, np.where(grid2(cnt) > 0, grid2(nyr), np.nan), norm=None, cmap="YlGnBu", vmin=1, vmax=41)
 cbar(fig, m1, ax1, "distinct years (1-41)")
 ax2 = polar_ax(fig, 1, 2, 2, "Number of distinct calendar months sampled per box")
-m2 = box_pcolor(ax2, grid2(nmo).astype(float), norm=None, cmap="YlOrRd", vmin=1, vmax=12)
+m2 = box_pcolor(ax2, np.where(grid2(cnt) > 0, grid2(nmo), np.nan), norm=None, cmap="YlOrRd", vmin=1, vmax=12)
 cbar(fig, m2, ax2, "distinct months of year (1-12)")
-f3d = savefig(fig, "s3d_years_months_per_box", "Distinct years and months per box")
+f3d = savefig(fig, "s3d_years_months_per_box",
+             "Distinct years and calendar months represented in occupied boxes; blank boxes have no profiles, and twelve months need not occur in the same year")
 
 # lat/lon grids
 GRID = {}
@@ -617,15 +649,19 @@ for res, g in GRID.items():
     rows.append(d)
 wo = WOCEAN
 n025_ocean = int(wo.sum())
-n1_ocean = int(wo.reshape(30, 4, 360, 4).any(axis=(1, 3)).sum())
+wo1 = wo.reshape(30, 4, 360, 4).any(axis=(1, 3))
+n1_ocean = int(wo1.sum())
 t_grids = pd.DataFrame(rows)
 t_grids["ocean cells in grid (WOA23 0.25 deg mask)"] = [n1_ocean, n025_ocean]
-t_grids["% ocean cells with data"] = [100 * (GRID[1.0] > 0).sum() / n1_ocean, 100 * (GRID[0.25] > 0).sum() / n025_ocean]
+t_grids["occupied cells outside ocean mask"] = [
+    int(((GRID[1.0] > 0) & ~wo1).sum()), int(((GRID[0.25] > 0) & ~wo).sum())]
+t_grids["% ocean cells with data"] = [
+    100 * ocean_grid_coverage(GRID[1.0], wo1), 100 * ocean_grid_coverage(GRID[0.25], wo)]
 savetab(t_grids, "s3_latlon_grid_distribution")
-K["g1_frac"] = float((GRID[1.0] > 0).sum() / n1_ocean)
-K["g025_frac"] = float((GRID[0.25] > 0).sum() / n025_ocean)
-K["g025_ge10"] = float((GRID[0.25] >= 10).sum() / n025_ocean)
-K["g1_ge10"] = float((GRID[1.0] >= 10).sum() / n1_ocean)
+K["g1_frac"] = ocean_grid_coverage(GRID[1.0], wo1)
+K["g025_frac"] = ocean_grid_coverage(GRID[0.25], wo)
+K["g025_ge10"] = ocean_grid_coverage(GRID[0.25], wo, threshold=10)
+K["g1_ge10"] = ocean_grid_coverage(GRID[1.0], wo1, threshold=10)
 
 fig = plt.figure(figsize=(14, 7.5))
 for k_, res in enumerate((1.0, 0.25)):
@@ -641,19 +677,22 @@ tb = t_boxdist.iloc[0]
 add(3, "## 3. Spatial distribution\n",
     f"Profiles were binned on a 100 km x 100 km grid that is an exact 4x4 block aggregation of the NSIDC EASE-Grid 2.0 "
     f"North 25 km grid (EPSG:6931, Lambert azimuthal equal area, so every box has the same area; {NB}x{NB} boxes cover the "
-    f"hemisphere, all profiles are north of 60N). Ocean area is taken from the EASE2 25 km land mask "
-    f"(`EASE2_N25km.LOCImask_land50_coast0km`, value 255 = water in the file, as verified against its PNG legend and profile positions; 625 km2 per cell, cells north of 60N): {K['ocean_area_mkm2']:.2f} million km2 in "
+    f"grid domain, all profiles are north of 60N). Ocean area is approximated from the EASE2 25 km land mask "
+    f"(`EASE2_N25km.LOCImask_land50_coast0km`, code 255 = water; 625 km2 per cell whose centre is north of 60N): {K['ocean_area_mkm2']:.2f} million km2 in "
     f"{K['n_ocean_boxes']:,} boxes containing any ocean. This includes marginal seas such as Hudson Bay, the Baltic, "
     f"Gulf of Alaska and the parts of the Sea of Okhotsk north of 60N, so the 'ocean without data' fraction counts every one of "
-    f"them. {occ_nonocean} occupied boxes contain no ocean cell of that mask (coastal/land boxes).\n",
+    f"them. {occ_nonocean} occupied boxes contain no ocean cell of that mask. This coastal/mask mismatch is "
+    f"retained in profile counts but contributes no ocean area. A box is counted as covered when its profile "
+    f"count meets the threshold; this does not establish coverage throughout its ocean area, at every depth or in every year.\n",
     "### 3a. Counts per 100 km box\n", f3a,
     "**Distribution of box counts, and by decade and season** (`tables/s3_box_count_distribution*.csv`)\n",
     mdtable(t_boxslices[["slice", "boxes >=1", "boxes >=5", "boxes >=10", "boxes >=50", "boxes >=100", "boxes >=1000",
                          "median per occupied", "mean per occupied", "max", "% ocean area with 0 profiles",
                          "% ocean area with >=10"]], dec=1),
-    f"*Reading.* {int(tb['boxes >=1']):,} boxes hold at least one profile; the median occupied box has "
+    f"**Interpretation.** {int(tb['boxes >=1']):,} boxes hold at least one profile; the median occupied box has "
     f"{tb['median per occupied']:.0f} profiles, the mean {tb['mean per occupied']:.0f}, the maximum "
-    f"{int(tb['max']):,} (heavy-tailed: a few boxes with ice-drift stations or repeated sections dominate). "
+    f"{int(tb['max']):,}. The difference between median and mean indicates strongly concentrated sampling; "
+    f"counts alone cannot identify its platform sources or number of independent observations. "
     f"{pct(zero_area, 1)} of the 60-90N ocean area lies in boxes with no profile at all, and only "
     f"{pct(K['cov10_all'], 1)} lies in boxes with >=10 profiles over the whole 41 years. The densest boxes (centre "
     f"lat, lon, count): " + "; ".join(f"({a:.1f}N, {b:.1f}E, {c:,})" for a, b, c in K['topbox']) + ".\n",
@@ -668,7 +707,11 @@ add(3, "## 3. Spatial distribution\n",
     mdtable(t_grids, dec=1),
     f"On the 1 deg grid {pct(K['g1_frac'], 1)} of WOA23 ocean cells north of 60N contain a profile "
     f"({pct(K['g1_ge10'], 1)} contain >=10); on the 0.25 deg grid {pct(K['g025_frac'], 1)} "
-    f"({pct(K['g025_ge10'], 1)} with >=10). Cell lists: `tables/s3_grid_1deg_counts.csv`, `tables/s3_grid_0.25deg_counts.csv`; "
+    f"({pct(K['g025_ge10'], 1)} with >=10). Numerators and denominators both use the WOA23 surface ocean mask "
+    f"(a 1 deg cell is ocean if any of its sixteen 0.25 deg cells is ocean). Occupied cells outside that mask "
+    f"are listed separately. These are fractions of cells, not ocean area; latitude/longitude cells shrink towards the pole "
+    f"and should not be compared directly with the EASE2 area fractions. "
+    f"Cell lists: `tables/s3_grid_1deg_counts.csv`, `tables/s3_grid_0.25deg_counts.csv`; "
     f"100 km box list: `tables/s3_box100km_counts.csv` (columns x, y [EPSG:6931 metres], lon, lat, count, n_years, "
     f"n_months, n_year_months, ocean_area_km2).\n")
 K["nyr10_frac"] = area_frac((nyr >= 10) & OCEAN_BOX)
@@ -706,7 +749,7 @@ t_selcov = pd.DataFrame({"depth (m)": SEL, "T obs": nT_lev[SELI], "% of profiles
 savetab(t_selcov, "s4_box_coverage_selected_depths")
 K["cov_sel"] = {z: (float(cov1a[i]), float(cov10a[i])) for z, i in zip(SEL, SELI)}
 rng = [("0-1500 m (WOA monthly & seasonal, 57 levels)", slice(0, NL57)),
-       ("1500-5500 m (levels deeper than 1500 m; WOA annual only)", slice(NL57, NZ)),
+       (">1500-5500 m (45 levels; WOA annual only)", slice(NL57, NZ)),
        ("0-5500 m (WOA annual, 102 levels)", slice(0, NZ))]
 rows = []
 for nm, sl in rng:
@@ -773,8 +816,9 @@ f4c = savefig(fig, "s4c_box_counts_by_depth", "Counts per box at selected depths
 
 dd_tab = t_lev[["depth_m"] + [f"T_obs_{lab}" for lab in DEC_LAB]].iloc[[0, 4, 10, 20, 24, 28, 36, 40, 46, 56, 66, 76, 86, 101]]
 add(4, "## 4. Depth distribution\n",
-    "Number of valid observations at each of the 102 standard levels (full table `tables/s4_observations_per_level.csv`, "
-    "which also has the per-decade counts and the box coverage at every level).\n", f4a,
+    "Counts of non-missing level-values at each of the 102 standard depths (full table `tables/s4_observations_per_level.csv`, "
+    "including counts by reporting period and box coverage at every level). Reaching a depth and having a value at that "
+    "depth are different criteria; Section 1 reports depth reach, whereas this section reports values at individual levels.\n", f4a,
     "**Observations by depth range**\n", mdtable(t_rng_obs, dec=1),
     f"There are {K['obs_0_1500']:,} T observations in 0-1500 m but only {K['obs_deep']:,} below 1500 m "
     f"({pct(K['obs_deep'], K['obs_0_1500'] + K['obs_deep'], 2)} of all T observations) from {K['prof_deep']:,} profiles.\n",
@@ -785,15 +829,15 @@ add(4, "## 4. Depth distribution\n",
 fr0, fr5, fr10 = (float(vT[:, i].mean()) for i in (0, 1, 2))
 n_mismatch = int((vT != vS).sum())
 K.update(fill0=fr0, fill5=fr5, fill10=fr10, TS_mismatch=n_mismatch, n_valid_TS=int((vT & vS).sum()))
-add(4, "### Surface-level artefact and T/S consistency (computed)\n",
+add(4, "### Surface-level availability and T/S consistency\n",
     f"The 0 m level contains **{int(vT[:, 0].sum()):,}** valid T values and {int(vS[:, 0].sum()):,} valid S values "
     f"({pct(1 - fr0, 1, 1)} empty). The 5 m level is {pct(fr5, 1)} filled and the 10 m level {pct(fr10, 1)} "
-    f"(15 m: {pct(float(vT[:, 3].mean()), 1)}). The lower fill at 5 m is consistent with the upstream interpolation "
-    f"blanking the level nearest the first observation; near-surface (0-10 m) statistics must therefore be read "
-    f"as 5/10 m values. T and S are valid together in {int((vT & vS).sum()):,} level-values; cells where exactly one of "
+    f"(15 m: {pct(float(vT[:, 3].mean()), 1)}). These are observed availability patterns in the released arrays. "
+    f"They do not by themselves identify the upstream interpolation behaviour that produced them. "
+    f"Values at 5 or 10 m must not be presented as observations at 0 m or as full mixed-layer coverage. "
+    f"T and S are present together in {int((vT & vS).sum()):,} level-values; entries where exactly one of "
     f"them is valid: {n_mismatch:,}. Missing values are NaN after `scatter_io.load_scatter` / `data/scatter_all.npz` "
-    f"normalisation (raw yearly files use 0.0 for missing S/pres and arbitrary numbers for dens, so they are never read "
-    f"directly here).\n")
+    f"normalisation. If the cache is absent, the yearly files are loaded through the same normalising loader.\n")
 log("section 4 done")
 
 # ============================================================================= SECTION 5: regions
@@ -888,7 +932,11 @@ rm = pd.DataFrame(np.array([[np.nanmedian(maxdepth[(REG == i) & (dec_idx == k_)]
 savetab(rm, "s5_median_max_depth_region_decade", index=True)
 add(5, "## 5. Regional distribution\n",
     "Regions are simple lon/lat boxes/polygons (applied in priority order, first match wins) defined in this script; "
-    "they are approximations meant for bookkeeping, not oceanographic boundaries.\n",
+    "they are approximate reporting regions, not validated oceanographic boundaries. Every profile is assigned once, "
+    "and the central-Arctic region uses lat >=80N after excluding the Canadian Arctic Archipelago polygon; "
+    "the historical '>80N' label in tables is shorthand for that rule. All regions are clipped by the available "
+    "north-of-60N dataset and ocean mask. Regional area coverage uses the count in each whole 100 km box, "
+    "including profiles in a neighbouring region if the box crosses a boundary.\n",
     mdtable(pd.DataFrame({"region": REG_NAMES, "definition (lon E, lat N)": REG_DEF})), f5a,
     "**Profiles per region and decade; median maximum depth; coverage of the region's ocean area by 100 km boxes**\n",
     mdtable(t_reg, dec={"% of profiles": 1, "median max depth (m)": 0, "% reaching 1000 m": 1, "% with S": 1,
@@ -1034,7 +1082,7 @@ SC = 25.0  # km per day in the scaled space (2 d = 50 km)
 tree3 = cKDTree(np.c_[px / 1e3, py / 1e3, tdays * SC])
 nn_cnt = tree3.query_ball_point(np.c_[px / 1e3, py / 1e3, tdays * SC], r=50.0, return_length=True) - 1
 
-# profile-level class and confidence
+# Profile-level labels and heuristic scores (not calibrated probabilities).
 CLASSES = ["ITP-like", "Argo-like", "ship-CTD-like", "other/unclassified"]
 pclass = np.full(N, "other/unclassified", dtype=object)
 psub = np.full(N, "unclassified", dtype=object)
@@ -1042,7 +1090,7 @@ pconf = np.zeros(N)
 m = track_class == "ITP-like"
 ok_md = (maxdepth >= 100) & (maxdepth <= 1000)
 pclass[m] = "ITP-like"
-psub[m] = "drifting track, short steps, ice-covered basin"
+psub[m] = "high-latitude candidate track, short steps"
 pconf[m] = track_score[m] * np.where(ok_md[m], 1.0, 0.7)
 m = track_class == "Argo-like"
 ok_md2 = (maxdepth >= 900) & (maxdepth <= 2300)
@@ -1050,10 +1098,7 @@ pclass[m] = "Argo-like"
 psub[m] = "regular ~10 d cycle track"
 pconf[m] = track_score[m] * np.where(ok_md2[m], 1.0, 0.7)
 m = track_class == "fixed-point series"
-psub[m] = "fixed-point series (mooring / repeated station)"
-pconf[m] = track_score[m]
-m = track_class == "drifting shallow platform"
-psub[m] = "drifting high-latitude track, shallow (<100 m median max depth)"
+psub[m] = "low-extent candidate series"
 pconf[m] = track_score[m]
 m = track_class == "drifting shallow platform"
 psub[m] = "drifting high-latitude track, shallow (<100 m median max depth)"
@@ -1080,15 +1125,15 @@ rows = []
 for c in CLASSES:
     m = pclass == c
     rows.append({"class (INFERRED)": c, "profiles": int(m.sum()), "fraction (%)": 100 * m.mean(),
-                 "mean confidence": float(pconf[m].mean()), "profiles with confidence >= 0.6": int((m & (pconf >= conf_hi)).sum()),
-                 "% with conf >= 0.6": 100 * float((pconf[m] >= conf_hi).mean()),
+                 "mean heuristic score": float(pconf[m].mean()), "profiles with score >= 0.6": int((m & (pconf >= conf_hi)).sum()),
+                 "% with score >= 0.6": 100 * float((pconf[m] >= conf_hi).mean()),
                  "median max depth (m)": float(np.nanmedian(maxdepth[m])), "% with S": 100 * float(hasS[m].mean()),
                  "first year": int(year[m].min()) if m.any() else np.nan,
                  "median lat (N)": float(np.median(lat[m]))})
 t_cls = pd.DataFrame(rows)
 savetab(t_cls, "s6_class_summary")
 t_sub = (pd.DataFrame({"class": pclass, "subclass": psub, "conf": pconf}).groupby(["class", "subclass"])
-         .agg(profiles=("conf", "size"), mean_confidence=("conf", "mean")).reset_index())
+         .agg(profiles=("conf", "size"), mean_score=("conf", "mean")).reset_index())
 t_sub["fraction (%)"] = 100 * t_sub["profiles"] / N
 savetab(t_sub, "s6_subclass_summary")
 ct_year = pd.crosstab(year, pd.Categorical(pclass, categories=CLASSES)).reindex(yrs, fill_value=0)
@@ -1148,13 +1193,14 @@ for c in CLASSES:
     bot += ct_year[c].values
 axs[0].set_xlabel("year"); axs[0].set_ylabel("profiles"); axs[0].legend(); axs[0].set_title("INFERRED class per year (counts)")
 bot = np.zeros(len(yrs))
-tot = ct_year.sum(1).values.clip(1)
+tot = ct_year.sum(axis=1).values.clip(1)
 for c in CLASSES:
     axs[1].bar(yrs, 100 * ct_year[c].values / tot, bottom=bot, color=cols[c], label=c)
     bot += 100 * ct_year[c].values / tot
 axs[1].set_xlabel("year"); axs[1].set_ylabel("% of the year's profiles"); axs[1].set_title("INFERRED class per year (share)")
 axs[1].axvline(2003.5, color="k", ls=":")
-f6a = savefig(fig, "s6a_class_per_year", "Inferred class per year")
+f6a = savefig(fig, "s6a_class_per_year",
+             "Unvalidated sampling-pattern labels by year; neither counts nor shares identify platform contributions")
 
 fig = plt.figure(figsize=(13, 13))
 axl = []
@@ -1164,7 +1210,7 @@ for k_, c in enumerate(CLASSES):
     mm = box_pcolor(ax, grid2(bcount(m)), norm=LogNorm(1, cnt.max()), cmap="viridis")
     axl.append(ax)
 cbar(fig, mm, axl, "profiles per 100 km box (log)")
-f6b = savefig(fig, "s6b_class_maps", "Class maps")
+f6b = savefig(fig, "s6b_class_maps", "Spatial distribution of heuristic labels, with a common logarithmic count scale")
 
 fig, axs = plt.subplots(1, 2, figsize=(13, 4.5))
 for c in CLASSES:
@@ -1176,7 +1222,7 @@ axs[0].set_xscale("symlog", linthresh=50); axs[0].set_xlabel("max valid depth z 
 axs[0].legend(); axs[0].set_title("maximum depth per INFERRED class (exceedance)")
 axs[1].set_xscale("symlog", linthresh=50); axs[1].set_yscale("log"); axs[1].set_xlabel("deepest valid level (m)")
 axs[1].set_ylabel("% of class profiles per level"); axs[1].set_title("distribution of deepest level")
-f6c = savefig(fig, "s6c_class_maxdepth", "Max depth per class")
+f6c = savefig(fig, "s6c_class_maxdepth", "Depth reach by heuristic label; depth itself is an input to these rules")
 
 sdt = step_dt_s[sidx]
 fig, axs = plt.subplots(1, 3, figsize=(16, 4.5))
@@ -1192,7 +1238,8 @@ ci_ = ct_year["ITP-like"].values; ca_ = ct_year["Argo-like"].values
 axs[2].semilogy(yrs, ci_.clip(0.5), "C3o-", label="ITP-like"); axs[2].semilogy(yrs, ca_.clip(0.5), "C0s-", label="Argo-like")
 axs[2].axvline(2004, color="C3", ls=":"); axs[2].axvline(2000, color="C0", ls=":")
 axs[2].set_xlabel("year"); axs[2].set_ylabel("profiles"); axs[2].legend(); axs[2].set_title("first appearance (year not used by classifier)")
-f6d = savefig(fig, "s6d_validation", "Heuristic validation")
+f6d = savefig(fig, "s6d_validation",
+             "Linked-profile timing and historical benchmark years; these are consistency checks, not independent platform validation")
 
 # ---- near duplicates and identical copies
 log("section 6: duplicates")
@@ -1241,7 +1288,7 @@ for minlev in (1, 5):
     same_pos_difft = int(((gg["nlat"] == 1) & (gg["nlon"] == 1) & (gg["nt"] > 1)).sum())
     diff_pos = int(((gg["nlat"] > 1) | (gg["nlon"] > 1)).sum())
     rows.append({"min valid levels": minlev, "profiles considered": len(q), "identical-T groups (size>=2)": ng,
-                 "profiles in such groups": len(qq), "redundant copies (profiles - groups)": len(qq) - ng,
+                 "profiles in such groups": len(qq), "profiles beyond one per T group": len(qq) - ng,
                  "largest group": int(gg["size"].max()) if ng else 0,
                  "groups: same lat,lon,time": same_all, "groups: same lat,lon, different time": same_pos_difft,
                  "groups: different position": diff_pos})
@@ -1250,6 +1297,10 @@ savetab(t_ident, "s6_identical_T_summary")
 q = dfh[dfh["n"] >= 1]
 gsz = q.groupby("h")["n"].transform("size")
 qq = q[gsz >= 2].copy()
+for members in qq.groupby("h").groups.values():
+    reference = T[members[0]]
+    if not all(np.array_equal(reference, T[i], equal_nan=True) for i in members[1:]):
+        raise RuntimeError("Temperature hash collision: identical-T counts cannot be reported")
 gg = qq.groupby("h").agg(size=("n", "size"), n_levels=("n", "max"), lat_min=("lat", "min"), lat_max=("lat", "max"),
                          lon_min=("lon", "min"), lon_max=("lon", "max"), t_first=("t", "min"), t_last=("t", "max"),
                          year_first=("y", "min")).sort_values("size", ascending=False)
@@ -1263,7 +1314,7 @@ ident_pair = (hashT[pa_] == hashT[pb_]) & (nlevT[pa_] >= 1)
 rows = [
     ["pairs within 5 h (all, input to the tests)", int((dts <= 18000).sum()), nprof(dts <= 18000)],
     ["pairs |dlat|<0.1, |dlon|<0.1, dt<6 h  (criterion as coded in upstream duplicate.m)", int(up6.sum()), nprof(up6)],
-    ["pairs |dlat|<0.1, |dlon|<0.1, dt<=5 h  (criterion as stated in the manuscript)", int(up5.sum()), nprof(up5)],
+    ["pairs |dlat|<0.1, |dlon|<0.1, dt<=5 h  (5 h variant motivated by the manuscript)", int(up5.sum()), nprof(up5)],
     ["  same but with dateline-aware dlon", int(up6w.sum()), nprof(up6w)],
     ["pairs within 1 km (haversine) and 1 h", int(p1km1h.sum()), nprof(p1km1h)],
     ["pairs within 1 km and identical time stamp", int(p1km1h_dt0.sum()), nprof(p1km1h_dt0)],
@@ -1279,7 +1330,8 @@ cls_a = pclass[pa_[up6]]
 cls_b = pclass[pb_[up6]]
 t_dupcls = pd.crosstab(cls_a, cls_b)
 t_dupcls = t_dupcls.reindex(index=CLASSES, columns=CLASSES, fill_value=0)
-savetab(t_dupcls.reset_index().rename(columns={"row_0": "class A"}), "s6_near_duplicate_pairs_by_class")
+t_dupcls.index.name = "class A / class B"
+savetab(t_dupcls.reset_index(), "s6_near_duplicate_pairs_by_class")
 yr_dup = pd.Series(year[pa_[up6]]).value_counts().sort_index()
 savetab(yr_dup.rename("pairs").reset_index().rename(columns={"index": "year", "row_0": "year"}), "s6_near_duplicate_pairs_per_year")
 # clusters
@@ -1300,15 +1352,15 @@ for cidx in top_c:
     hh = pd.Series(hashT[mem]).value_counts()
     rows.append({"cluster size": len(mem), "centre lat": float(lat[mem].mean()), "centre lon": float(lon180[mem].mean()),
                  "start": str(np.datetime64(int(tsec[mem].min()), "s")), "end": str(np.datetime64(int(tsec[mem].max()), "s")),
-                 "lat span (deg)": float(np.ptp(lat[mem])), "profiles with a duplicate-T twin": int((hh[hh >= 2]).sum()),
+                 "lat span (deg)": float(np.ptp(lat[mem])), "profiles with an identical-T match": int((hh[hh >= 2]).sum()),
                  "dominant inferred class": pd.Series(pclass[mem]).value_counts().index[0],
                  "dominant region": REG_NAMES[int(pd.Series(REG[mem]).value_counts().index[0])]})
 t_cltop = pd.DataFrame(rows)
 savetab(t_cltop, "s6_near_duplicate_top_clusters")
 K.update(dup6_pairs=int(up6.sum()), dup6_prof=nprof(up6), dup5_pairs=int(up5.sum()), dup1km_pairs=int(p1km1h.sum()),
          dup1km_prof=nprof(p1km1h), dup_ident_pairs=int((up6 & ident_pair).sum()),
-         ident_redundant1=int(t_ident.iloc[0]["redundant copies (profiles - groups)"]),
-         ident_redundant5=int(t_ident.iloc[1]["redundant copies (profiles - groups)"]),
+         ident_redundant1=int(t_ident.iloc[0]["profiles beyond one per T group"]),
+         ident_redundant5=int(t_ident.iloc[1]["profiles beyond one per T group"]),
          ident_groups5=int(t_ident.iloc[1]["identical-T groups (size>=2)"]),
          ncl2=int(len(big)), maxcl=int(sz.max()) if len(sz) else 0)
 fig, axs = plt.subplots(1, 3, figsize=(16, 4.3))
@@ -1318,74 +1370,114 @@ axs[1].hist(np.log10(dkm[up6] + 1e-3), bins=60, color="C5"); axs[1].set_xlabel("
 axs[2].bar(range(len(t_clsz)), t_clsz["clusters"], color="C6"); axs[2].set_yscale("log")
 axs[2].set_xticks(range(len(t_clsz))); axs[2].set_xticklabels(t_clsz["cluster size"]); axs[2].set_xlabel("cluster size (profiles chained by the 0.1 deg/6 h test)")
 axs[2].set_ylabel("clusters")
-f6e = savefig(fig, "s6e_near_duplicates", "Near-duplicate statistics")
+f6e = savefig(fig, "s6e_near_duplicates",
+             "Space-time proximity counts and connected-component sizes; repeated sampling and duplicate records are not distinguished")
 del pa_, pb_, dts, dla, dlo, dlo_w, dkm, hav, la1, la2
 
 # ---- markdown
-LIM = ("**Limitations (read before using the classes).** (1) The files contain no platform or source field; every class below is a "
-       "*pattern-based guess* from time, position, depth reach and salinity availability. (2) Track linking is a greedy one-to-one "
-       "matching with a speed limit; where several platforms operate close together, or a ship works near a float, links can be "
-       "stolen or broken, so floats and ITPs are fragmented into many tracks and some of their profiles end up in the ship class. "
-       "(3) Argo-like detection needs consecutive cycles of 8-12.5 d within 100 km; floats that surface less regularly (ice avoidance), "
-       "profile every 5 d, or are sampled once, are missed. (4) 'ship-CTD-like' is the residual catch-all for S-bearing profiles that are "
-       "in a station cluster or reach >= 300 m; it contains moorings, gliders, bottle/CTD data of other origin, and fragments of floats. "
-       "(5) The year is NOT used by the classifier, so first-appearance years are a genuine (if weak) check; but no ground-truth "
-       "labels were available, hence no precision/recall can be computed. Confidence is a heuristic score in [0,1], not a probability.")
-add(6, "## 6. Sampling patterns and INFERRED provenance\n",
-    "> **Everything in this section is INFERRED, not ground truth.** The published files carry no source identifier. The upstream "
-    "processing (the upstream `duplicate.m`) numbered the sources 1 ITP, 2 Argo, 3 BOL (Bolin Centre), 4 NABOS, 5 CNarc "
-    "(Xuelong/Xuelong-2), 6 WOD18, 7 CMEMS, but those IDs were dropped. The classes below are produced by a transparent heuristic.\n",
+LIM = (
+    "**Limits of interpretation.** No profile-level platform or source identifiers are available, and no labelled "
+    "validation sample was used. The rules can connect unrelated records or split a real platform's series, especially "
+    "where several sampling systems operate nearby. Irregular cycles, gaps and isolated records can prevent an Argo-like "
+    "assignment. *Ship-CTD-like* is a residual label for salinity-bearing clustered or sufficiently deep profiles: it may "
+    "include other observations such as moorings, gliders, bottle data or fragments of profiler series. "
+    "Neither this label nor ITP-like and Argo-like establishes instrument type. Scores in [0,1] quantify the stated "
+    "rules only; they are not probabilities, confidence intervals or estimates of classification accuracy. "
+    "No precision, recall or source-specific quality ranking can be established from these arrays."
+)
+add(6, "## 6. Heuristic sampling-pattern labels and proximity screening\n",
+    "> **Labels are inferred sampling patterns, not identified platforms.** All profile membership and class counts "
+    "below come from this script's unvalidated rules, not the source identifiers of the original observing systems.\n",
+    "**Externally reported provenance.** The dataset and its compilation are described by "
+    "[Li, Wu and Wang (2025)](https://doi.org/10.1038/s41597-025-05855-3). An earlier repository review of the released "
+    "`duplicate.m` reports the source numbering 1 ITP, 2 Argo, 3 BOL (Bolin Centre), 4 NABOS, "
+    "5 CNarc (Xuelong/Xuelong-2), 6 WOD18 and 7 CMEMS. Those identifiers are not fields in the scatter arrays used here; "
+    "this source inventory must not be confused with the heuristic membership below. "
+    "This diagnostic run does not re-execute or independently validate the upstream compilation.\n",
     "### 6.1 Method\n",
     f"1. **Track linking.** Profiles are sorted by time; for every profile, candidate successors within {TMAX:.0f} d are searched "
     f"within {DCAP + D0:.0f} km (KD-tree in EPSG:6931 km). A link i->j requires dt in (1 min, {TMAX:.0f} d] and distance <= "
-    f"{D0:.0f} km + min({VMAX:.0f} km/d x dt, {DCAP:.0f} km) (i.e. drift <= ~0.5 m/s). Links are assigned greedily, one successor and one "
+    f"{D0:.0f} km + min({VMAX:.0f} km/d x dt, {DCAP:.0f} km). These are projected distances, not geodesic distances; "
+    f"the additive allowance means this is not a strict speed bound. Links are assigned greedily, one successor and one "
     f"predecessor per profile, in two passes: pass A for steps <= {PASS_A_DT:.0f} d (cost = dt + distance/{VMAX:.0f} km d-1), then pass B for "
-    f"{PASS_A_DT:.0f}-{TMAX:.0f} d (cost = distance / allowed distance). Linked chains are tracks: {int(nlinks):,} links, "
+    f"{PASS_A_DT:.0f}-{TMAX:.0f} d (cost = distance / allowed distance + 0.001 x dt in days). "
+    f"Each pass retains at most {KEEP} lowest-cost outgoing and incoming candidates per profile. "
+    f"Linked chains are candidate tracks, not recovered platform trajectories: {int(nlinks):,} links, "
     f"{n_trk5:,} tracks with >= 5 profiles containing {pct(n_in_trk5, N, 1)} of all profiles.\n"
     "2. **Track statistics** (number of profiles, duration, median time step, fraction of steps in 8-12.5 d and <= 3 d, drift speed, extent, "
-    "median maximum depth, median latitude) are in `tables/s6_tracks_n_ge_5.csv`.\n"
+    "median maximum depth, median latitude) are in `tables/s6_tracks_n_ge_5.csv`. "
+    "Extent is the diagonal of the track's projected bounding box; step statistics exclude terminal profiles with no successor.\n"
     "3. **Track classes.** *ITP-like*: >= 10 profiles, score >= 0.80 where score = 0.35 x fraction of steps <= 3 d + 0.25 x latitude factor "
-    "(0 at 66N, 1 at >= 72N) + 0.25 x [median max depth 100-1000 m] + 0.15 x [extent >= 20 km]. *Argo-like*: >= 5 profiles, >= 50% of steps "
-    "8-12.5 d, score >= 0.70 with score = 0.5 x fraction of regular steps + 0.3 x [median max depth 900-2300 m] + 0.2 x [median step 8-12.5 d]. "
+    "(linear from 0 at 66N to 1 at >=72N) + 0.25 x depth factor + 0.15 x [extent >=20 km]. "
+    "The depth factor is 1 for median maximum depth 100-1000 m, 0.5 for 50-<100 m or >1000-1500 m, and 0 otherwise. "
+    "The short-step fraction includes steps >0.02 d and <=3 d. *Argo-like*: >=5 profiles, >=50% of steps "
+    "8-12.5 d, score >=0.70 with score = 0.5 x fraction of regular steps + 0.3 x depth factor + 0.2 x [median step 8-12.5 d]. "
+    "Its depth factor is 1 for 900-2300 m, 0.5 for 600-<900 m or >2300-4000 m, and 0 otherwise. "
     "*Fixed-point series*: >= 20 profiles, extent <= 10 km, duration >= 5 d (reported under 'other'). *Drifting shallow platform*: "
-    ">= 10 profiles, >= 70% steps <= 3 d, lat >= 70N, median max depth < 100 m (under 'other').\n"
-    "4. **Profile classes.** Profiles in a classified track inherit its class (confidence = track score, x0.7 if the profile's depth reach is outside "
-    "the class range). Remaining profiles with salinity and either >= 2 neighbours within 50 km and 2 d, or a maximum depth >= 300 m, are "
-    "*ship-CTD-like* (confidence = 0.25 x [in station cluster] + 0.25 x [>= 300 m] + 0.25 x [Jun-Oct] + 0.25 x [has S]); everything else "
-    "(T-only profiles, isolated shallow profiles, fixed-point and shallow drifting series) is *other/unclassified* (confidence 0.2-0.6).\n",
+    ">=10 profiles, >=70% short steps, median lat >=70N, median max depth <100 m (under 'other'). "
+    "Fixed-point rules take priority. If both ITP-like and Argo-like pass, the larger score wins, with ties assigned ITP-like; "
+    "shallow-drift rules apply only to tracks not assigned those classes.\n"
+    "4. **Profile labels and scores.** ITP-like and Argo-like track members inherit the label and score, multiplied by 0.7 "
+    "if the individual depth reach lies outside 100-1000 m or 900-2300 m respectively. Fixed-point and shallow-drift "
+    "members remain *other/unclassified*. Fixed-point score = 0.5 + 0.5 x min(1, track length/200); "
+    "shallow-drift score = 0.6 x short-step fraction. Among remaining profiles, those with salinity and either "
+    ">=2 neighbours in the search neighbourhood or depth reach >=300 m are *ship-CTD-like*: "
+    "score = 0.25 x [>=2 neighbours] + 0.25 x [>=300 m] + 0.25 x [Jun-Oct] + 0.25 x [has S]. "
+    "The neighbourhood is a radius-50 sphere in (projected x km, projected y km, time days x25): "
+    "spatial distance squared + (25 x time separation) squared <=50 squared. Thus 50 km and 2 d are "
+    "separate maxima, not a rectangular space-time search. Other residual profiles receive score 0.2. "
+    "Square brackets denote indicator values 0 or 1; no year or sea-ice field is used.\n",
     LIM + "\n",
     "### 6.2 Results: classes\n",
-    mdtable(t_cls, dec={"fraction (%)": 1, "mean confidence": 2, "% with conf >= 0.6": 1, "median max depth (m)": 0, "% with S": 1,
+    mdtable(t_cls, dec={"fraction (%)": 1, "mean heuristic score": 2, "% with score >= 0.6": 1, "median max depth (m)": 0, "% with S": 1,
                         "median lat (N)": 1, "first year": 0}),
-    "Subclasses:\n", mdtable(t_sub, dec={"mean_confidence": 2, "fraction (%)": 1}),
+    "**Rule-based subclasses** (the cluster wording uses the ellipsoidal neighbourhood defined above):\n",
+    mdtable(t_sub, dec={"mean_score": 2, "fraction (%)": 1}),
     f6a,
     "**Track statistics per inferred class** (tracks with >= 5 profiles)\n", mdtable(t_trk, dec=1),
     f6b, "**Maximum depth by inferred class**\n", mdtable(t_clsdepth, dec=1), f6c,
     "**Inferred class per region** (profiles; `tables/s6_class_per_region.csv`)\n",
     mdtable(ct_reg.reset_index().rename(columns={"index": "region"})),
-    "### 6.3 Validation against known structure (weak, no ground truth)\n", f6d,
-    f"* The classifier does not use the year. ITP-like profiles first appear in **{first_itp}** (ITPs were first deployed in 2004), with "
-    f"{itp_pre04:,} ITP-like profiles before 2004. Argo-like profiles first appear in **{first_argo}**, with {argo_pre00:,} before 2000.\n"
+    "### 6.3 Internal consistency and historical benchmarks\n", f6d,
+    f"* The classifier does not use the year. ITP-like profiles first appear in **{first_itp}**, with "
+    f"{itp_pre04:,} before the historical 2004 ITP deployment benchmark. Argo-like profiles first appear in **{first_argo}**, "
+    f"with {argo_pre00:,} before the 2000 Argo benchmark. These early labels show why a sampling-pattern name "
+    f"cannot be interpreted as an identified platform.\n"
     f"* {pct(frac10, 1)} of Argo-like tracks have a median step of 9-11 d (regularity is built into the rule, so this is not independent); "
-    f"the histogram of all link steps (left panel) shows the structure independent of the classification: a short-step population from "
-    f"profilers and a ~10 d peak. Argo-like profiles have median latitude {argo_lat:.1f}N and {pct(argo_nordic_share, 1)} lie in the "
-    f"Nordic seas / Barents / subpolar North Atlantic regions; {pct(itp_lat72, 1)} of ITP-like profiles are north of 72N.\n",
-    "### 6.4 Near-duplicates and exact copies still in the data\n",
-    "The published deduplication (`duplicate.m`) removed a profile of sources 2-7 only if an earlier-accepted profile lay within |dlat|<0.1, "
-    "|dlon|<0.1 (raw degrees, no cos(lat) and no dateline wrap) and < 6 h (the manuscript says 5 h). Source 1 (ITP) was never "
-    "tested, profiles within one input file were not tested against each other (the comparison list is built per file), so "
-    "near-duplicates are expected to remain among ITP profiles and within a source's file.\n",
+    f"the all-link histogram also depends on the candidate search and greedy matching. Neither timing panel independently "
+    f"validates the labels. Argo-like profiles have median latitude {argo_lat:.1f}N and {pct(argo_nordic_share, 1)} lie in the "
+    f"Nordic seas / Barents / subpolar North Atlantic reporting regions; {pct(itp_lat72, 1)} of ITP-like profiles are north of 72N. "
+    f"Latitude is itself an input to the ITP-like rule.\n",
+    "### 6.4 Space-time proximity and identical temperature arrays\n",
+    "**Reported upstream rule.** The earlier review of `duplicate.m` describes a comparison of sources 2-7 with previously "
+    "accepted profiles using |dlat|<0.1 deg, |dlon|<0.1 deg and dt<6 h, without dateline wrapping; "
+    "the publication describes a 5 h window. That review reports that source 1 (ITP) and pairs within one input file "
+    "were not compared by this routine. These statements concern the released workflow, not the identity of individual "
+    "records in this report.\n",
+    "**Observed proximity counts.** The tests below operate on all published profiles, including repeated observations "
+    "from the same sampling series. Angular windows are not constant physical distances, particularly at high latitudes. "
+    "Each unordered pair is counted once; a profile can occur in many pairs. "
+    "Passing a proximity test is a review flag, not proof of erroneous duplication or a reason to delete a record.\n",
     mdtable(t_dup, dec=1),
-    f"{K['dup6_pairs']:,} pairs ({K['dup6_prof']:,} profiles, {pct(K['dup6_prof'], N, 1)}) still satisfy the 0.1 deg / 6 h test; "
+    f"{K['dup6_pairs']:,} pairs involve {K['dup6_prof']:,} distinct profiles ({pct(K['dup6_prof'], N, 1)}) under the 0.1 deg / 6 h test; "
     f"{K['dup1km_pairs']:,} pairs ({K['dup1km_prof']:,} profiles) lie within 1 km and 1 h. Of the 6 h pairs, {K['dup_ident_pairs']:,} have "
-    f"bitwise-identical T arrays.\n",
-    "**Near-duplicate pairs by inferred class of the two members**\n", mdtable(t_dupcls.reset_index().rename(columns={"index": "class A \\ class B"})),
+    f"matching temperature values and missing-level patterns. Salinity, pressure, density and original observation identifiers "
+    f"are not part of that equality test.\n",
+    "**Proximity pairs by inferred label of the two members** (A is the earlier member in stable time order; "
+    "the matrix is not symmetrised)\n", mdtable(t_dupcls.reset_index()),
     "**Clusters** (chains of profiles linked by the 0.1 deg / 6 h test)\n", mdtable(t_clsz),
-    f"There are {K['ncl2']:,} clusters of >= 2 profiles; the largest has {K['maxcl']:,} profiles. Largest clusters:\n",
+    f"There are {K['ncl2']:,} connected components of >=2 profiles; the largest has {K['maxcl']:,} profiles. "
+    f"Connections are transitive: two members of a component may be much farther apart than the pairwise thresholds. "
+    f"These components are not duplicate-event counts or validated platform tracks. Largest components:\n",
     mdtable(t_cltop, dec=2), f6e,
-    "**Exact copies** (identical T array including the NaN pattern; computed with a hash of each profile)\n", mdtable(t_ident),
-    f"{K['ident_redundant1']:,} profiles (all lengths) and {K['ident_redundant5']:,} profiles with >= 5 valid levels are redundant exact copies "
-    f"(in {K['ident_groups5']:,} groups). Largest groups: `tables/s6_identical_T_top_groups.csv`.\n")
+    "**Identical temperature arrays** (stored values and missing-level pattern; hash matches are checked against the arrays)\n",
+    mdtable(t_ident),
+    f"The number of profiles beyond one per temperature group is {K['ident_redundant1']:,} for all lengths "
+    f"and {K['ident_redundant5']:,} for profiles with >=5 valid levels (in {K['ident_groups5']:,} groups). "
+    f"These are not counts of confirmed duplicate observations. Identical short or rounded arrays can occur in "
+    f"distinct observations; equality of temperature alone does not establish equality of the complete record. "
+    f"Source identifiers and original records would be needed to resolve their meaning. "
+    f"Largest groups: `tables/s6_identical_T_top_groups.csv`.\n")
 log("section 6 done")
 
 # ============================================================================= SECTION 7: data quality
@@ -1435,7 +1527,7 @@ for i0 in range(0, N, CH):
     CT = gsw.CT_from_t(SA, Tc, Pc)
     pm = 0.5 * (Pc[:, :-1] + Pc[:, 1:])
     d_ = gsw.rho(SA[:, :-1], CT[:, :-1], pm) - gsw.rho(SA[:, 1:], CT[:, 1:], pm)  # >0: denser water above
-    ok = ~np.isnan(d_)
+    ok = np.isfinite(d_)
     pair_cnt += ok.sum(0)
     prof_has_pair[sl] = ok.any(1)
     for j, th in enumerate(THR_INV):
@@ -1444,20 +1536,22 @@ for i0 in range(0, N, CH):
         prof_inv[j, sl] = m.any(1)
     tf = gsw.t_freezing(SA, Pc, 0.0)
     dd = Tc - tf
-    okf = ~np.isnan(dd)
+    okf = np.isfinite(dd)
     frz_valid += okf.sum(0)
     frz_within += (okf & (np.abs(dd) <= 0.01)).sum(0)
     frz_below += (okf & (dd < -0.01)).sum(0)
-    g = ~np.isnan(SA) & ~np.isnan(CT)
+    g = np.isfinite(SA) & np.isfinite(CT)
     H_TS += np.histogram2d(SA[g], CT[g], bins=[SAE, CTE])[0].astype(np.int64)
     del Tc, Sc, Pc, SA, CT, pm, d_, tf, dd
 log("  gsw done")
 n_pairs = int(pair_cnt.sum())
 t_inv = pd.DataFrame({"threshold rho(k)-rho(k+1) (kg/m3)": THR_INV,
-                      "adjacent-level pairs unstable": inv_cnt.sum(1),
+                      "adjacent-level pairs flagged": inv_cnt.sum(1),
                       "% of pairs": 100 * inv_cnt.sum(1) / n_pairs,
-                      "profiles with >=1 unstable pair": prof_inv.sum(1),
-                      "% of profiles with S": 100 * prof_inv.sum(1) / hasS.sum()})
+                      "profiles with >=1 flagged pair": prof_inv.sum(1),
+                      "% of profiles with S": 100 * prof_inv.sum(1) / hasS.sum(),
+                      "profiles with assessable pairs": int(prof_has_pair.sum()),
+                      "% of assessable profiles": 100 * prof_inv.sum(1) / prof_has_pair.sum()})
 savetab(t_inv, "s7_static_instability")
 bandsI = [("0-50 m", 0, 50), ("50-200 m", 50, 200), ("200-700 m", 200, 700), ("700-1500 m", 700, 1500), ("1500-5500 m", 1500, 5500)]
 rows = []
@@ -1469,25 +1563,29 @@ t_invb = pd.DataFrame(rows)
 savetab(t_invb, "s7_static_instability_per_band")
 t_invcls = pd.DataFrame({"class (INFERRED)": CLASSES,
                          "profiles with S": [int((hasS & (pclass == c)).sum()) for c in CLASSES],
-                         "% unstable (>0.03 kg/m3)": [100 * (prof_inv[2] & (pclass == c)).sum() / max(1, (hasS & (pclass == c) & prof_has_pair).sum())
-                                                       for c in CLASSES]})
+                         "profiles with assessable pairs": [int((prof_has_pair & (pclass == c)).sum()) for c in CLASSES],
+                         "profiles flagged (>0.03 kg/m3)": [int((prof_inv[2] & (pclass == c)).sum()) for c in CLASSES],
+                         "% of assessable profiles flagged": [
+                             100 * (prof_inv[2] & (pclass == c)).sum() / max(1, int(((pclass == c) & prof_has_pair).sum()))
+                             for c in CLASSES]})
 savetab(t_invcls, "s7_static_instability_per_class")
 fig, axs = plt.subplots(1, 2, figsize=(11, 5), sharey=True)
 for j, th in enumerate(THR_INV):
     axs[0].plot(100 * inv_cnt[j] / np.maximum(pair_cnt, 1) + 1e-4, depth[:-1], label=f"> {th} kg/m3")
 axs[0].set_xscale("log")
 axs[0].invert_yaxis()
-axs[0].set_xlabel("% of adjacent-level pairs unstable (+1e-4)")
+axs[0].set_xlabel("% of assessable adjacent-level pairs flagged (+1e-4)")
 axs[0].set_ylabel("depth of upper level (m)")
-axs[0].set_title("(a) static instability by depth")
+axs[0].set_title("(a) common-pressure density inversion screening")
 axs[0].legend()
 axs[1].plot(100 * frz_within / np.maximum(frz_valid, 1), depth, label="|T - T_freeze| <= 0.01")
 axs[1].plot(100 * frz_below / np.maximum(frz_valid, 1), depth, label="T < T_freeze - 0.01")
 axs[1].set_xscale("symlog", linthresh=0.01)
-axs[1].set_xlabel("% of valid T values")
+axs[1].set_xlabel("% of levels with assessable T, S and pressure")
 axs[1].set_title("(b) values at / below the freezing point")
 axs[1].legend()
-f7b = savefig(fig, "s7b_instability_freezing", "Static instability and freezing-point values by depth")
+f7b = savefig(fig, "s7b_instability_freezing",
+             "Density-inversion and freezing-point screening at standard depths; flags are not validated error diagnoses")
 fz = pd.DataFrame({"level": np.arange(NZ), "depth_m": depth, "valid_T_with_S": frz_valid, "within_0.01_of_Tfreeze": frz_within,
                    "below_Tfreeze_minus_0.01": frz_below})
 savetab(fz, "s7_freezing_point_per_level")
@@ -1502,14 +1600,15 @@ cs_s, cs_t = np.meshgrid(np.linspace(30, 38, 120), np.linspace(-2.2, 10, 120))
 sg = gsw.sigma0(cs_s, cs_t)
 cc_ = ax.contour(cs_s, cs_t, sg, levels=np.arange(22, 29, 0.5), colors="k", linewidths=0.5)
 ax.clabel(cc_, fmt="%.1f", fontsize=7)
-ax.set_xlim(30, 36)
+ax.set_xlim(SAE[0], SAE[-1])
 ax.set_ylim(-2.2, 10)
 ax.set_xlabel("Absolute salinity SA (g/kg)")
 ax.set_ylabel("Conservative temperature CT (degC)")
-ax.set_title("T-S diagram, all valid levels (colour: count, log); contours: sigma0 (kg/m3)")
+ax.set_title("SA-CT histogram in the displayed window; contours: sigma0 (kg/m3)")
 cb = fig.colorbar(mm, ax=ax)
 cb.set_label("number of observations")
-f7c = savefig(fig, "s7c_TS_diagram", "T-S density diagram")
+f7c = savefig(fig, "s7c_TS_diagram",
+             "Absolute salinity–Conservative Temperature histogram (log counts) within SA 30–38 g/kg and CT -2.2–10 degC; contours show sigma0")
 K["TS_n"] = int(H_TS.sum())
 
 # spikes
@@ -1538,7 +1637,7 @@ lvl_tab = {"depth_m": depth[:NL57]}
 for nm, msk, col, key in (("Central Arctic (>80N)", CENTRAL, "C3", "central"), ("Nordic seas", NORDIC, "C0", "nordic")):
     for v, arr0, ai in (("T", T, 0), ("S", S, 2)):
         arr = arr0[msk][:, :NL57]
-        mu, sd = np.nanmean(arr, 0), np.nanstd(arr, 0)
+        mu, sd = level_mean_std(arr)
         lvl_tab[f"{key}_{v}_n"] = np.sum(~np.isnan(arr), 0)
         lvl_tab[f"{key}_{v}_mean"] = mu
         lvl_tab[f"{key}_{v}_std"] = sd
@@ -1553,7 +1652,8 @@ axs[0].invert_yaxis()
 axs[0].set_ylabel("depth (m)")
 axs[0].legend(fontsize=7)
 fig.suptitle("Mean +/- std (shaded) of T and S at the 57 levels 0-1500 m")
-f7d = savefig(fig, "s7d_mean_std_profiles", "Mean and std profiles in central Arctic and Nordic seas")
+f7d = savefig(fig, "s7d_mean_std_profiles",
+             "Observation-weighted means and population standard deviations by depth; shading is mean ±1 standard deviation, not a confidence interval")
 savetab(pd.DataFrame(lvl_tab), "s7_mean_std_57_levels_central_nordic")
 WM = [("Polar Mixed Layer (0-50 m)", 0, 50), ("Halocline (50-200 m)", 50, 200), ("Atlantic layer (200-900 m)", 200, 900),
       ("Intermediate (900-2000 m)", 900, 2000), ("Deep / bottom water (>=2000 m)", 2000, 5501)]
@@ -1570,32 +1670,54 @@ for nm, msk in (("Central Arctic >80N", CENTRAL), ("Nordic seas", NORDIC)):
 t_wm = pd.DataFrame(rows)
 savetab(t_wm, "s7_water_mass_layers")
 
-add(7, "## 7. Data-quality descriptors of what remains\n",
+add(7, "## 7. Thermodynamic screening and descriptive statistics\n",
     "All statistics use the normalised arrays (NaN = missing). Temperature is treated as in-situ temperature and salinity as practical "
     "salinity (an assumption: the files do not state it). Pressure comes from the per-profile `pres` array. Seawater properties were "
-    f"computed with `gsw` for **all {int(hasS.sum()):,} profiles with S** (no sub-sampling), in chunks of 20,000 profiles.\n",
+    f"computed with `gsw` across the full dataset (including **{int(hasS.sum()):,} profiles with S**), "
+    f"in chunks of 20,000 profiles, without random subsampling. A level or pair is assessable only where the "
+    f"required T, S and pressure values produce finite seawater properties. These diagnostics flag unusual "
+    f"patterns under the stated assumptions; they do not validate the upstream QC, identify erroneous values "
+    f"or justify automatic rejection. No instrument uncertainty or independent truth dataset is supplied.\n",
     "### 7.1 T and S per depth band\n", f7a, mdtable(t_band, dec=2),
-    "### 7.2 Static stability\n",
+    "### 7.2 Common-pressure density inversions\n",
     "For each pair of adjacent valid levels the in-situ densities of both parcels were compared at the mid-pressure "
-    "(`gsw.rho(SA, CT, p_mid)`); a pair is *unstable* if the upper parcel is denser than the lower by more than the stated threshold. "
-    "Because the data are on a standard-depth grid, small inversions can reflect real mixed-layer noise or interpolation, "
-    "so several thresholds are reported.\n",
+    "(`gsw.rho(SA, CT, p_mid)`); a pair is flagged if the upper parcel is denser than the lower by more than the stated threshold. "
+    "Absolute Salinity and Conservative Temperature are calculated using the recorded position and pressure. "
+    "This is an adjacent-level screen, not a complete stability analysis or an error diagnosis. "
+    "Physical variability, measurement uncertainty and interpolation can all affect the result. "
+    "The existing four thresholds are retained; no uncertainty-calibrated threshold is inferred here.\n",
     mdtable(t_inv, dec=3), mdtable(t_invb, dec=3),
     f"Out of {n_pairs:,} adjacent-level pairs, {t_inv.iloc[1, 2]:.3f}% exceed 0.01 kg/m3 and "
     f"{t_inv.iloc[2, 2]:.3f}% exceed 0.03 kg/m3. {t_inv.iloc[1, 4]:.2f}% of profiles with S have at least one pair above 0.01 kg/m3 "
     f"and {t_inv.iloc[2, 4]:.2f}% above 0.03 kg/m3.\n",
-    "**By INFERRED class** (class is a heuristic label)\n", mdtable(t_invcls, dec=2),
-    "### 7.3 Freezing point and spikes\n", f7b,
+    "**Denominators.** Overall profile percentages use all profiles with salinity, including those without an "
+    "assessable adjacent-level pair. The additional assessable-profile column and the class table below use "
+    "only profiles with at least one such pair; an unassessable profile is not a clean-QC result. "
+    "Depth-band percentages use assessable pairs whose upper depth lies in that band.\n",
+    "**By inferred sampling-pattern label** (not a source-specific quality comparison)\n", mdtable(t_invcls, dec=2),
+    "### 7.3 Freezing-point and vertical-gradient screens\n", f7b,
     f"* Values within +/-0.01 degC of the in-situ freezing temperature (`gsw.t_freezing(SA, p, 0)`): **{n_within:,}** "
-    f"({pct(n_within, n_fv, 2)} of {n_fv:,} valid T values with S); values more than 0.01 degC below freezing: {n_below:,} "
+    f"({pct(n_within, n_fv, 2)} of {n_fv:,} assessable T/S/pressure level-values); values more than 0.01 degC below freezing: {n_below:,} "
     f"({pct(n_below, n_fv, 3)}). Exactly T = -2.0 degC: {n_Tm2:,} values (the data minimum is {K['T_min']:.2f} degC).\n",
     mdtable(t_spk, dec=3),
+    "The freezing calculation uses the air-free (`saturation_fraction=0`) convention. Near-freezing values can be "
+    "physically plausible; below-freezing differences require context and the stated temperature/salinity assumptions. "
+    "The gradient tests use absolute differences between adjacent non-missing standard levels divided by their "
+    "depth separation. They detect steep gradients, not uniquely isolated spikes: real fronts, stratification, "
+    "interpolation and measurement problems can all trigger them. Thresholds are fixed screening choices, "
+    "not demonstrated limits on acceptable measurements.\n",
     "Per-level counts: `tables/s7_spikes_per_level.csv`, `tables/s7_freezing_point_per_level.csv`.\n",
     "### 7.4 T-S diagram\n", f7c,
-    f"The diagram holds {K['TS_n']:,} observations (all valid levels, in the plotted SA/CT window). Outliers are not removed.\n",
+    f"The displayed histogram contains {K['TS_n']:,} level-values within its SA/CT window. "
+    f"Values outside that window are not shown, so it is not a histogram of every non-missing value. "
+    f"No additional quality filter is applied before binning. All depths are pooled and profiles with more levels "
+    f"contribute more entries; the diagram is not weighted to equalise profiles, area or time.\n",
     "### 7.5 Mean and spread of T and S, 0-1500 m, in two basins\n", f7d,
     "Central Arctic = the 'Central Arctic (>80N ...)' region of Section 5; Nordic seas = the Fram Strait/Greenland Sea, Iceland Sea and "
-    "Norwegian Sea regions. The spread mixes years, seasons and locations and is not a measurement error.\n",
+    "Norwegian Sea regions. Means and standard deviations pool non-missing values at each depth without "
+    "area, time or platform reweighting. The contributing sample changes with depth. Spread combines "
+    "spatial, seasonal and interannual variability, sampling differences and any measurement or processing effects; "
+    "it is neither a measurement-error estimate nor a confidence interval for a climatological mean.\n",
     "**Nominal water-mass layers by depth range** (fixed depth boundaries, not property-defined)\n", mdtable(t_wm, dec=2))
 log("section 7 done")
 
@@ -1651,9 +1773,10 @@ FIT = [
      "mean over the 4 WOA quarters of the % of 60-90N ocean area with >=10 T profiles at 500 m; by quarter: "
      + ", ".join(f"{q} {v:.0f}%" for q, v in q500.items())),
     ("Regional climatology of the Atlantic layer (north of 70N)", m2,
-     f"% of ocean area >70N with >=10 profiles at 300 m (all years); {int(t_cen.iloc[:, 1].sum()):,} central-Arctic profiles reach >=200 m"),
-    ("Basin-scale deep (>2000 m) analysis", m3,
-     f"% of 60-90N ocean area with >=10 profiles at 2000 m (denominator includes shelves shallower than 2000 m, so a lower bound); "
+     f"% of mask ocean area in boxes with centres >=70N and >=10 T profiles at 300 m (all years); "
+     f"{int(t_cen.iloc[:, 1].sum()):,} central-Arctic profiles reach >=200 m"),
+    ("Basin-scale deep (>=2000 m) analysis", m3,
+     f"% of 60-90N mask ocean area with >=10 T profiles at 2000 m (shelves are included; not a bathymetry-limited deep-water fraction); "
      f"{K['prof_deep']:,} profiles ({pct(K['prof_deep'], N, 1)}) have data below 1500 m"),
     ("Mixed layer / near-surface (0-50 m)", m4,
      "mean over quarters of % ocean area with >=10 profiles at 10 m (0 m is empty, 5 m partly filled); by quarter: "
@@ -1664,43 +1787,56 @@ FIT = [
     ("Seasonal cycle in the central Arctic", m7,
      f"% of calendar months with >=100 central-Arctic profiles reaching >=200 m from >=10 distinct years; {int(cen_ok.sum())} of 12 months pass"),
     ("Eulerian time series at a point", m8,
-     f"% ocean area in 100 km boxes with >=100 profiles, >=10 years, >=6 calendar months; INFERRED fixed-point series: {n_fixed}"),
-    ("Validation of models/reanalyses (point-wise, 1 deg)", m9, "% of 1 deg ocean cells north of 60N with >=10 profiles (all years, all depths)"),
+     f"% mask ocean area in 100 km boxes with >=100 profiles, >=10 years, >=6 calendar months; candidate low-extent series: {n_fixed}"),
+    ("Validation of models/reanalyses (point-wise, 1 deg)", m9,
+     "% of WOA-mask 1 deg ocean cells north of 60N with >=10 profiles (all years, any depth; cell-count rather than area fraction)"),
     ("Ocean heat content 0-700 m", m10,
      "% ocean area with >=10 profiles reaching >=700 m (all years); by decade: " + ", ".join(f"{l} {v:.0f}%" for l, v in zip(DEC_LAB, c700d))),
 ]
+winter_years = t_cen.loc[t_cen["month"].isin(["Dec", "Jan", "Feb", "Mar"]), "distinct years (those profiles)"]
 NOTES = {
-    FIT[0][0]: "Needs large influence radii/smoothing; unconstrained in many boxes in at least one season.",
-    FIT[1][0]: "Best in Eurasian Basin and Nordic seas where drifting-platform and ship profiles are dense.",
-    FIT[2][0]: "Deep data come mostly from ship CTD casts, mainly summer; Argo-like profiles stop at ~2000 m.",
-    FIT[3][0]: "0 m is empty and 5 m only ~67% filled; summer/ice-free sampling bias dominates.",
-    FIT[4][0]: "Best-covered layer; fine vertical spacing, many INFERRED ITP-like profiles in the basins after 2004.",
-    FIT[5][0]: "Coverage shifts from sparse ship sections to drifting platforms and Argo, changing place and season.",
-    FIT[6][0]: f"Passes the count rule, but only {pct((CENTRAL & (year < 2003)).sum(), CENTRAL.sum(), 1)} of central-Arctic profiles predate 2003; winter months rest on only ~15 years (mostly drifting platforms), so interannual and seasonal signals are confounded.",
-    FIT[7][0]: "Only few locations; most data are drifting or one-off stations.",
-    FIT[8][0]: "Subsample the model at the data locations/times instead of comparing with the mean state.",
-    FIT[9][0]: "Needs profiles that reach 700 m; shallow drifting-platform profiles reduce effective coverage.",
+    FIT[0][0]: "A 500 m quarterly proxy does not establish monthly support through 1500 m; interpolation choices require separate assessment.",
+    FIT[1][0]: "Counts at 300 m are a coverage proxy, not property-based identification of Atlantic-layer water or regional representativeness.",
+    FIT[2][0]: "Few values reach these depths; the metric does not identify their source platforms or their seasonal representativeness.",
+    FIT[3][0]: f"No 0 m values; 5 m fill is {pct(fr5, 1)}. Values at 10 m do not resolve mixed-layer structure or surface conditions.",
+    FIT[4][0]: "A 100 m salinity count does not establish resolved halocline gradients, measurement quality or independent sampling.",
+    FIT[5][0]: "Distinct-year counts do not ensure contiguous records, consistent locations/seasons or a valid trend uncertainty model.",
+    FIT[6][0]: f"Only {pct((CENTRAL & (year < 2003)).sum(), CENTRAL.sum(), 1)} of central-Arctic profiles predate 2003; Dec-Mar depth-reaching profiles cover {winter_years.min()}-{winter_years.max()} distinct years per month. Unequal year/location support can confound a seasonal comparison.",
+    FIT[7][0]: "A sampled 100 km box is not a fixed-point time series; candidate low-extent chains also require original-record verification.",
+    FIT[8][0]: "Evaluate at observed locations, times and depths; account for representativeness and possible overlap with model assimilation data.",
+    FIT[9][0]: "Depth reach alone does not ensure complete 0-700 m profiles, valid heat integration or representative basin/time coverage.",
 }
-t_fit = pd.DataFrame([{"purpose": a, "metric (% ocean area)": b, "rating": rate(b), "metric definition / evidence": c,
+t_fit = pd.DataFrame([{"purpose": a, "coverage metric (%)": b, "coverage category": rate(b), "metric definition / evidence": c,
                        "comment": NOTES[a]} for a, b, c in FIT])
 savetab(t_fit, "s8_fitness_for_purpose")
-add(8, "## 8. Fitness for purpose\n",
-    "Ratings are computed by rule: each purpose has one coverage metric (percent of the "
-    f"{K['ocean_area_mkm2']:.1f} million km2 of 60-90N ocean in 100 km boxes meeting a stated sampling criterion). "
-    "**Good** >= 60 %, **Marginal** 20-60 %, **Poor** < 20 %. The metric is an upper-bound indicator of coverage "
-    "(it ignores seasonal, instrument and quality issues), so read each rating together with its comment. "
-    "The denominator includes marginal seas (Hudson Bay, Baltic, Gulf of Alaska, ...) and shelves, which lowers all percentages; "
-    "central-Arctic and Nordic-seas coverage is better than the area-wide numbers.\n",
+add(8, "## 8. Application-specific coverage screens\n",
+    "The table retains the original heuristic categories: **Good** >=60%, **Marginal** >=20% and <60%, "
+    "**Poor** <20%. They describe a single sampling-count proxy for each application, **not validated fitness "
+    "for that purpose**. In particular, a 'Good' category is not an endorsement for assimilation, trend estimation, "
+    "independent model validation or a resolved seasonal climatology.\n",
+    f"Most metrics weight the {K['ocean_area_mkm2']:.1f} million km2 of EASE2 mask ocean area north of 60N by "
+    "the fraction in 100 km boxes meeting a count rule. The Atlantic-layer proxy instead uses the area in boxes "
+    "whose centres are >=70N. The central-Arctic seasonal proxy is a fraction of twelve calendar months, "
+    "and the model-validation proxy is a fraction of WOA-mask 1 deg ocean cells, not area. "
+    "Each row states its denominator and selection. Shelves and marginal seas are retained in the broad area denominator; "
+    "no bathymetric deep-ocean denominator is calculated. The categories are not directly comparable across these different metrics.\n",
+    "No proxy measures independent sample size, instrument uncertainty, full depth coverage, temporal homogeneity "
+    "or causal effects of observing systems. Counts pool years unless stated otherwise, and a depth-range application "
+    "is generally represented by only one selected depth or a depth-reach criterion.\n",
     mdtable(t_fit, dec=1),
     "**Central Arctic by calendar month** (profiles reaching >=200 m)\n", mdtable(t_cen),
-    "### Prose summary\n",
-    f"* **Strengths.** {N:,} profiles with matched T and S; {K['frac_class']['ITP-like'] * 100:.0f}% of profiles are INFERRED ITP-like, giving "
-    "dense sampling of the ice-covered basins after 2004 for the upper few hundred metres.\n"
-    f"* **Weaknesses.** {pct(zero_area, 1)} of the 60-90N ocean area has no profile; only {pct(K['cov10_all'], 1)} has >=10 profiles; "
-    "sampling shifts strongly between sea-ice seasons and decades; deep data are sparse.\n"
-    "* **Recommendation.** Use the data for regional/sectional studies of the upper 700 m and halocline since 2004, process studies and "
-    "model comparison at profile locations. Use gridded climatologies, trend and deep-ocean studies only with an explicit "
-    "sampling-bias assessment.\n")
+    "### Implications for analysis\n",
+    f"* **Observed strengths.** {n_both:,} profiles contain both T and S; the upper ocean is much more densely sampled than "
+    "deep levels. Regional, depth-specific and time-specific counts provide a starting point for selecting supported analyses.\n"
+    f"* **Observed constraints.** {pct(zero_area, 1)} of mask ocean area lies in boxes without any profile, "
+    f"and {pct(K['cov10_all'], 1)} lies in boxes with >=10 over the whole record. Those counts do not quantify "
+    "the effective number of independent observations. Spatial and calendar support change through time; deep and surface-level data are limited.\n"
+    "* **Use with explicit safeguards.** For regional or profile-location comparisons, verify the relevant year, season, "
+    "depth and QC support rather than relying on total counts. Gridding and heat-content integration require a documented "
+    "missing-data and weighting method. Trends require evaluation of changing sampling and serial dependence. "
+    "Model validation requires checking whether these observations contributed to the evaluated analysis or assimilation. "
+    "This report does not provide an observation-error model, establish validation independence or certify reliability "
+    "for assimilation.\n")
 log("section 8 done")
 
 # ============================================================================= assemble the markdown
@@ -1712,39 +1848,121 @@ winter = int(np.isin(month, [12, 1, 2, 3]).sum())
 y_peak = int(np.argmax(yr_cnt))
 cls_txt = "; ".join(f"{c} {K['class_counts'][c]:,} ({pct(K['frac_class'][c], 1, 1)})" for c in CLASSES)
 EXEC = [
-    f"* **Size.** {N:,} profiles, {K['year_min']}-{K['year_max']}; {int(hasT.sum()):,} with T, {int(hasS.sum()):,} with S, {n_both:,} with both "
-    f"({pct(n_noS, hasT.sum(), 2)} of profiles with T have no S). Median {K['med_nlev']:.0f} valid levels; median maximum depth {K['med_maxdepth']:.0f} m.",
+    f"* **Scope.** {N:,} profile records cover {K['year_min']}-{K['year_max']}; {int(hasT.sum()):,} contain temperature "
+    f"and {n_both:,} contain both temperature and salinity. Profiles with temperature but no salinity: {n_noS:,}. "
+    f"The median profile has {K['med_nlev']:.0f} non-missing temperature levels and reaches {K['med_maxdepth']:.0f} m.",
     f"* **Depth.** Fraction reaching >=700 m: {pct((maxdepth >= 700).sum(), N)}; >=1500 m: {pct((maxdepth >= 1500).sum(), N)}; "
     f">=3000 m: {pct((maxdepth >= 3000).sum(), N)}. The 0 m level is empty; 5 m is {pct(nT_lev[1], N, 0)} filled, 10 m {pct(nT_lev[2], N, 0)}.",
     f"* **Time.** {pct(post05, N)} of the profiles are from 2005 onwards; peak year {y_peak} ({yr_cnt[y_peak]:,}). "
     f"Jun-Sep holds {pct(summer, N)} of profiles, Dec-Mar {pct(winter, N)}.",
-    f"* **Space.** {pct(zero_area, 1)} of the {K['ocean_area_mkm2']:.1f} million km2 of 60-90N ocean (EASE2 100 km boxes) has no profile; "
-    f"{pct(K['cov10_all'], 1)} has >=10; {pct(K['nyr10_frac'], 1)} has data from >=10 distinct years.",
-    f"* **Inferred provenance (INFERRED, not ground truth).** {cls_txt}.",
-    f"* **Duplicates.** {K['dup6_pairs']:,} pairs still within 0.1 deg / 6 h ({K['dup1km_pairs']:,} pairs within 1 km / 1 h); "
-    f"{K['ident_redundant5']:,} redundant exact copies with >=5 valid levels.",
-    f"* **Quality.** {t_inv.iloc[1, 4]:.1f}% of profiles have a static inversion >0.01 kg/m3; {K['spike_T_prof']:,} profiles have a T step >0.3 degC/m; "
-    f"{pct(n_within, n_fv, 2)} of T values are within 0.01 degC of freezing.",
-    "* **Fitness (by rule, Section 8).** " + "; ".join(f"{a.split(' (')[0]}: {rate(b)}" for a, b, _ in FIT) + ".",
+    f"* **Spatial support.** Of {K['ocean_area_mkm2']:.1f} million km2 of mask ocean area north of 60N, "
+    f"{pct(zero_area, 1)} lies in 100 km boxes without any profile; {pct(K['cov10_all'], 1)} lies in boxes with >=10, "
+    f"and {pct(K['nyr10_frac'], 1)} in boxes sampled in >=10 distinct years. These are box-based coverage proxies, not resolved ocean coverage.",
+    f"* **Unvalidated sampling-pattern labels.** {cls_txt}. No platform identifiers are available; "
+    f"ship-CTD-like includes residual patterns that can arise from other observing systems.",
+    f"* **Proximity and temperature equality.** {K['dup6_pairs']:,} unordered pairs meet the 0.1 deg / 6 h screen "
+    f"and {K['dup1km_pairs']:,} meet the 1 km / 1 h screen. For temperature arrays with >=5 valid levels, "
+    f"{K['ident_redundant5']:,} records lie beyond one per identical-T group. None of these counts establishes erroneous duplication.",
+    f"* **Thermodynamic screening.** {t_inv.iloc[1, 4]:.1f}% of profiles with salinity have a common-pressure "
+    f"density inversion >0.01 kg/m3; {K['spike_T_prof']:,} profiles have an adjacent-level temperature gradient "
+    f">0.3 degC/m; {pct(n_within, n_fv, 2)} of assessable level-values are within 0.01 degC of freezing. "
+    f"These are screening flags, not validated error diagnoses.",
+    "* **Analysis implications.** Section 8 reports application-specific count proxies using the existing "
+    "Good/Marginal/Poor categories. Even a Good category does not establish independence, trend reliability, "
+    "assimilation suitability or a resolved seasonal climatology.",
 ]
 HEAD = [
-    "# AOTD scattered (profile) data: descriptive report\n",
-    f"*Generated {GEN_DATE} by `scripts/07_report_scatter_data.py`. All numbers are computed from `data/scatter_all.npz` "
-    "(the normalised cache of the yearly files; NaN = missing for T, S, pressure and density).*\n",
+    "# AOTD profile data: coverage, sampling patterns and screening diagnostics\n",
+    f"*Generated {GEN_DATE} by [the report script](../../scripts/07_report_scatter_data.py) from "
+    f"{'`data/scatter_all.npz` (normalised cache)' if NPZ.exists() else 'the yearly files loaded through `scatter_io.load_scatter`'} "
+    "and the local ocean-mask inputs listed below.*\n",
+    "This report describes the released profile records, their spatial, temporal and depth support, "
+    "and transparent screening diagnostics. It does not reconstruct platform identities, "
+    "validate upstream quality control or demonstrate fitness for a scientific application.\n",
     "## Executive summary\n", "\n".join(EXEC) + "\n",
     "## Data notes and conventions\n",
-    "* Missing values: the raw yearly files encode missing S and pressure as 0.0 and density arbitrarily; the loader/cache normalises these "
-    "to NaN and this report uses only the normalised arrays.\n"
-    f"* T and S are always valid together ({int(vT.sum()):,} valid T/S level-values). The 0 m level has no T or S in any profile.\n"
-    "* There is no platform/source field in the files. Anything labelled *INFERRED* is a heuristic guess from sampling patterns "
-    "and is not ground truth.\n"
-    "* Boxes: 100 km x 100 km blocks of the EASE-Grid 2.0 North grid (EPSG:6931); land from the EASE2 land mask.\n"
-    "* Regions are simple longitude/latitude polygons defined in the script (Section 5).\n",
+    "* **Missing versus valid.** Raw-file salinity and pressure sentinels and density entries at missing temperature "
+    "levels are handled by `scatter_io.normalize_missing_values`. This report uses the normalised arrays with NaN "
+    "as the missing-value marker; *valid* means present, not independently QC-verified.\n"
+    f"* **T/S availability.** {K['n_valid_TS']:,} level-values contain both temperature and salinity; "
+    f"entries with only one variable: {K['TS_mismatch']:,}. The 0 m level has neither variable in any profile. "
+    "Depth reach is based on the deepest non-missing temperature level unless otherwise specified.\n"
+    "* **Thermodynamic convention.** T is treated as in-situ temperature and S as practical salinity; "
+    "this convention is an assumption because the files do not fully document it. Pressure is the recorded per-profile array. "
+    "Derived TEOS-10 quantities are diagnostics under these assumptions, not a substitute for source metadata.\n"
+    "* **Counts and denominators.** A profile is a published record; a level-value is one variable at one depth. "
+    "Percentages use the denominator stated in each table and may round a nonzero count to 0.0%. "
+    "Profile counts are not independent sample sizes. Standard deviations are population descriptors (ddof=0).\n"
+    "* **Spatial conventions.** EASE2 boxes are 100 km x100 km blocks in EPSG:6931. Mask ocean area is "
+    "the number of 25 km water cells with centres >=60N times 625 km2. Longitudes in tables are degrees east, "
+    "so negative values are west. Regions use ordered approximate lon/lat rules (Section 5).\n"
+    "* **Evidence levels.** Source inventories are externally reported provenance; counts are observed diagnostics; "
+    "ITP-like, Argo-like and ship-CTD-like are unvalidated sampling-pattern inferences. "
+    "Proximity, temperature equality and thermodynamic flags do not establish erroneous observations.\n",
+    "## Report guide\n",
+    "[Overview](#1-overview-of-the-profile-data) · [Time](#2-temporal-distribution) · "
+    "[Space](#3-spatial-distribution) · [Depth](#4-depth-distribution) · "
+    "[Regions](#5-regional-distribution) · "
+    "[Heuristics and proximity](#6-heuristic-sampling-pattern-labels-and-proximity-screening) · "
+    "[Thermodynamic diagnostics](#7-thermodynamic-screening-and-descriptive-statistics) · "
+    "[Application screens](#8-application-specific-coverage-screens) · "
+    "[Reproducibility](#reproducibility-and-source-attribution)\n",
 ]
 parts = HEAD
 for i in range(1, 9):
     parts += SEC[i]
-parts += ["## Appendix: tables written\n", "\n".join(f"* `tables/{n}`" for n in sorted(set(TABLES_WRITTEN))) + "\n"]
-(OUT / "scatter_report.md").write_text("\n".join(parts))
+log("recording input checksums")
+input_rows = []
+for path in INPUT_FILES + [EDIR / "EASE2_N25km.LOCImask_land50_coast0km.720x720.bin",
+                           EDIR / "NSIDC0772_LatLon_EASE2_N25km_v1.1.nc", WOA_MASK_FILE]:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    input_rows.append({"input": str(path.relative_to(ROOT)), "bytes": path.stat().st_size,
+                       "sha256": digest.hexdigest()})
+input_manifest = pd.DataFrame(input_rows)
+savetab(input_manifest, "s0_input_manifest")
+versions = "; ".join(f"{name} {importlib.metadata.version(name)}" for name in
+                     ("numpy", "scipy", "pandas", "xarray", "netCDF4", "pyproj", "matplotlib", "cartopy", "gsw"))
+parts += [
+    "## Reproducibility and source attribution\n",
+    "Run from the repository root using the environment described in [README](../../README.md):\n"
+    "```bash\n.venv/bin/python scripts/07_report_scatter_data.py\n```\n"
+    "The script writes this report, CSV tables and PNG figures only under `reports/scatter/`. "
+    "It uses an existing normalised cache when present; otherwise it loads and normalises the local yearly "
+    "scatter files. It does not download inputs, modify observations, remove flagged records or rerun the main pipeline. "
+    "Required ancillary files are the NSIDC 25 km land mask and coordinate file in `data/ease2/`, plus "
+    "`data/woa23_raw/woa23_decav91C0_t00_04.nc` for the latitude/longitude ocean mask. "
+    "The WOA23 mask comes from non-missing annual surface temperature, not from a bathymetric depth mask. "
+    "The EASE2 Sea Ice Regions file is not used by this script.\n",
+    f"**Runtime.** Python {sys.version.split()[0]}; {versions}. "
+    "There is no random subsampling. The generation date is the local run date. Greedy track linking uses stable "
+    "time sorting; tied-cost assignments can depend on input order and library behaviour, so retain the input "
+    "manifest and runtime versions alongside any scientific use of these diagnostics.\n",
+    "**Input identity for this run.** The SHA-256 manifest records local bytes, not independent verification "
+    "of the original download or authors' upstream workflow. A pre-existing cache is not rebuilt by this report.\n",
+    mdtable(input_manifest),
+    "**Sources and credit.**\n"
+    "* Li, J., Wu, X. & Wang, X. (2025). *An Arctic Ocean Thermohaline Dataset*. "
+    "*Scientific Data* 12, 1607. [Article and compilation methods](https://doi.org/10.1038/s41597-025-05855-3).\n"
+    "* Li, J. (2025). *AOTD_scatter*, figshare, version 1, CC BY 4.0. "
+    "[Published scatter data](https://doi.org/10.6084/m9.figshare.28825490.v1). "
+    "These observations are credited to the dataset authors and contributing observing programmes; "
+    "the heuristic labels in this report are not metadata supplied by those programmes.\n"
+    "* NOAA NCEI, [World Ocean Atlas 2023](https://www.ncei.noaa.gov/products/world-ocean-atlas), "
+    "1991-2020, 0.25 deg annual temperature file: used only to define the latitude/longitude ocean mask here.\n"
+    "* NSIDC, [NSIDC-0772](https://nsidc.org/data/nsidc-0772) coordinate ancillary data and "
+    "[NSIDC-0609](https://nsidc.org/data/nsidc-0609) EASE-Grid 2.0 land/ocean/coast/ice mask: "
+    "used for the equal-area grid and ocean-area accounting.\n"
+    "* WHOI, [Ice-Tethered Profiler programme](https://www.whoi.edu/itp/), and "
+    "[Argo programme](https://argo.ucsd.edu/): historical context for the benchmark years, "
+    "not profile-identity validation.\n",
+    "For the distinct expected-spread products and their assumptions, see the "
+    "[technical note](../../technical_note.md). None of the screening thresholds, heuristic labels or coverage "
+    "categories here should be interpreted as calibrated observation errors for those products.\n",
+    "## Appendix: complete CSV table index\n",
+    "\n".join(f"* [{n}](tables/{n})" for n in sorted(set(TABLES_WRITTEN))) + "\n",
+]
+(OUT / "scatter_report.md").write_text("\n".join(parts), encoding="utf-8")
 log(f"done: wrote {OUT / 'scatter_report.md'}")
-

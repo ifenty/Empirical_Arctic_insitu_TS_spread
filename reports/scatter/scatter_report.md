@@ -1,29 +1,36 @@
-# AOTD scattered (profile) data: descriptive report
+# AOTD profile data: coverage, sampling patterns and screening diagnostics
 
-*Generated 2026-10-14 by `scripts/07_report_scatter_data.py`. All numbers are computed from `data/scatter_all.npz` (the normalised cache of the yearly files; NaN = missing for T, S, pressure and density).*
+*Generated 2026-10-14 by [the report script](../../scripts/07_report_scatter_data.py) from `data/scatter_all.npz` (normalised cache) and the local ocean-mask inputs listed below.*
+
+This report describes the released profile records, their spatial, temporal and depth support, and transparent screening diagnostics. It does not reconstruct platform identities, validate upstream quality control or demonstrate fitness for a scientific application.
 
 ## Executive summary
 
-* **Size.** 414,221 profiles, 1983-2023; 414,221 with T, 414,220 with S, 414,220 with both (0.00% of profiles with T have no S). Median 25 valid levels; median maximum depth 250 m.
+* **Scope.** 414,221 profile records cover 1983-2023; 414,221 contain temperature and 414,220 contain both temperature and salinity. Profiles with temperature but no salinity: 1. The median profile has 25 non-missing temperature levels and reaches 250 m.
 * **Depth.** Fraction reaching >=700 m: 34.9%; >=1500 m: 9.6%; >=3000 m: 0.7%. The 0 m level is empty; 5 m is 67% filled, 10 m 90%.
 * **Time.** 81.3% of the profiles are from 2005 onwards; peak year 2019 (30,992). Jun-Sep holds 36.1% of profiles, Dec-Mar 28.6%.
-* **Space.** 11.0% of the 17.3 million km2 of 60-90N ocean (EASE2 100 km boxes) has no profile; 72.2% has >=10; 40.1% has data from >=10 distinct years.
-* **Inferred provenance (INFERRED, not ground truth).** ITP-like 120,157 (29.0%); Argo-like 23,262 (5.6%); ship-CTD-like 214,400 (51.8%); other/unclassified 56,402 (13.6%).
-* **Duplicates.** 437,714 pairs still within 0.1 deg / 6 h (62,271 pairs within 1 km / 1 h); 2,057 redundant exact copies with >=5 valid levels.
-* **Quality.** 5.0% of profiles have a static inversion >0.01 kg/m3; 27,978 profiles have a T step >0.3 degC/m; 1.03% of T values are within 0.01 degC of freezing.
-* **Fitness (by rule, Section 8).** Gridded climatology 0-1500 m: Marginal; Regional climatology of the Atlantic layer: Marginal; Basin-scale deep: Poor; Mixed layer / near-surface: Marginal; Halocline structure: Good; Interannual variability / trends: Marginal; Seasonal cycle in the central Arctic: Good; Eulerian time series at a point: Marginal; Validation of models/reanalyses: Marginal; Ocean heat content 0-700 m: Marginal.
+* **Spatial support.** Of 17.3 million km2 of mask ocean area north of 60N, 11.0% lies in 100 km boxes without any profile; 72.2% lies in boxes with >=10, and 40.1% in boxes sampled in >=10 distinct years. These are box-based coverage proxies, not resolved ocean coverage.
+* **Unvalidated sampling-pattern labels.** ITP-like 120,157 (29.0%); Argo-like 23,262 (5.6%); ship-CTD-like 214,400 (51.8%); other/unclassified 56,402 (13.6%). No platform identifiers are available; ship-CTD-like includes residual patterns that can arise from other observing systems.
+* **Proximity and temperature equality.** 437,714 unordered pairs meet the 0.1 deg / 6 h screen and 62,271 meet the 1 km / 1 h screen. For temperature arrays with >=5 valid levels, 2,057 records lie beyond one per identical-T group. None of these counts establishes erroneous duplication.
+* **Thermodynamic screening.** 5.0% of profiles with salinity have a common-pressure density inversion >0.01 kg/m3; 27,978 profiles have an adjacent-level temperature gradient >0.3 degC/m; 1.03% of assessable level-values are within 0.01 degC of freezing. These are screening flags, not validated error diagnoses.
+* **Analysis implications.** Section 8 reports application-specific count proxies using the existing Good/Marginal/Poor categories. Even a Good category does not establish independence, trend reliability, assimilation suitability or a resolved seasonal climatology.
 
 ## Data notes and conventions
 
-* Missing values: the raw yearly files encode missing S and pressure as 0.0 and density arbitrarily; the loader/cache normalises these to NaN and this report uses only the normalised arrays.
-* T and S are always valid together (11,811,887 valid T/S level-values). The 0 m level has no T or S in any profile.
-* There is no platform/source field in the files. Anything labelled *INFERRED* is a heuristic guess from sampling patterns and is not ground truth.
-* Boxes: 100 km x 100 km blocks of the EASE-Grid 2.0 North grid (EPSG:6931); land from the EASE2 land mask.
-* Regions are simple longitude/latitude polygons defined in the script (Section 5).
+* **Missing versus valid.** Raw-file salinity and pressure sentinels and density entries at missing temperature levels are handled by `scatter_io.normalize_missing_values`. This report uses the normalised arrays with NaN as the missing-value marker; *valid* means present, not independently QC-verified.
+* **T/S availability.** 11,811,886 level-values contain both temperature and salinity; entries with only one variable: 1. The 0 m level has neither variable in any profile. Depth reach is based on the deepest non-missing temperature level unless otherwise specified.
+* **Thermodynamic convention.** T is treated as in-situ temperature and S as practical salinity; this convention is an assumption because the files do not fully document it. Pressure is the recorded per-profile array. Derived TEOS-10 quantities are diagnostics under these assumptions, not a substitute for source metadata.
+* **Counts and denominators.** A profile is a published record; a level-value is one variable at one depth. Percentages use the denominator stated in each table and may round a nonzero count to 0.0%. Profile counts are not independent sample sizes. Standard deviations are population descriptors (ddof=0).
+* **Spatial conventions.** EASE2 boxes are 100 km x100 km blocks in EPSG:6931. Mask ocean area is the number of 25 km water cells with centres >=60N times 625 km2. Longitudes in tables are degrees east, so negative values are west. Regions use ordered approximate lon/lat rules (Section 5).
+* **Evidence levels.** Source inventories are externally reported provenance; counts are observed diagnostics; ITP-like, Argo-like and ship-CTD-like are unvalidated sampling-pattern inferences. Proximity, temperature equality and thermodynamic flags do not establish erroneous observations.
+
+## Report guide
+
+[Overview](#1-overview-of-the-profile-data) · [Time](#2-temporal-distribution) · [Space](#3-spatial-distribution) · [Depth](#4-depth-distribution) · [Regions](#5-regional-distribution) · [Heuristics and proximity](#6-heuristic-sampling-pattern-labels-and-proximity-screening) · [Thermodynamic diagnostics](#7-thermodynamic-screening-and-descriptive-statistics) · [Application screens](#8-application-specific-coverage-screens) · [Reproducibility](#reproducibility-and-source-attribution)
 
 ## 1. Overview of the profile data
 
-The scatter files hold **414,221** profiles from 1983 to 2023, each on the 102 WOA standard depths (0-5500 m). Counts below refer to a profile as having a *valid T* if at least one level is non-NaN.
+The scatter files hold **414,221** profiles from 1983 to 2023, each on the 102 WOA standard depths (0-5500 m). Counts below refer to a profile as having a *valid T* if at least one level is non-NaN. Here *valid* means present after missing-value normalisation, not verified by an independent quality assessment. A profile is one published record; a level-value is one temperature or salinity entry at a standard depth.
 
 | quantity | value | share |
 |---|---|---|
@@ -61,20 +68,20 @@ The scatter files hold **414,221** profiles from 1983 to 2023, each on the 102 W
 
 | max valid depth >= (m) | profiles with T (N) | fraction of profiles with T (%) | profiles with S (N) | fraction of profiles with S (%) |
 |---|---|---|---|---|
-| 0.00 | 414,221.00 | 100.00 | 414,220.00 | 100.00 |
-| 10.00 | 408,299.00 | 98.57 | 408,299.00 | 98.57 |
-| 50.00 | 337,539.00 | 81.49 | 337,539.00 | 81.49 |
-| 100.00 | 299,143.00 | 72.22 | 299,143.00 | 72.22 |
-| 300.00 | 192,313.00 | 46.43 | 192,313.00 | 46.43 |
-| 700.00 | 144,718.00 | 34.94 | 144,718.00 | 34.94 |
-| 1,000.00 | 58,457.00 | 14.11 | 58,457.00 | 14.11 |
-| 1,500.00 | 39,764.00 | 9.60 | 39,764.00 | 9.60 |
-| 2,000.00 | 11,065.00 | 2.67 | 11,065.00 | 2.67 |
-| 3,000.00 | 2,722.00 | 0.66 | 2,722.00 | 0.66 |
-| 4,000.00 | 164.00 | 0.04 | 164.00 | 0.04 |
-| 5,500.00 | 5.00 | 0.00 | 5.00 | 0.00 |
+| 0 | 414,221 | 100.00 | 414,220 | 100.00 |
+| 10 | 408,299 | 98.57 | 408,299 | 98.57 |
+| 50 | 337,539 | 81.49 | 337,539 | 81.49 |
+| 100 | 299,143 | 72.22 | 299,143 | 72.22 |
+| 300 | 192,313 | 46.43 | 192,313 | 46.43 |
+| 700 | 144,718 | 34.94 | 144,718 | 34.94 |
+| 1,000 | 58,457 | 14.11 | 58,457 | 14.11 |
+| 1,500 | 39,764 | 9.60 | 39,764 | 9.60 |
+| 2,000 | 11,065 | 2.67 | 11,065 | 2.67 |
+| 3,000 | 2,722 | 0.66 | 2,722 | 0.66 |
+| 4,000 | 164 | 0.04 | 164 | 0.04 |
+| 5,500 | 5 | 0.00 | 5 | 0.00 |
 
-**Value ranges** (valid cells only)
+**Value ranges** (non-missing level-values; percentiles and population standard deviation)
 
 | variable | unit | N values | min | p0.1 | p1 | median | mean | std | p99 | p99.9 | max |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -83,13 +90,17 @@ The scatter files hold **414,221** profiles from 1983 to 2023, each on the 102 W
 | dens (in-situ density) | kg m-3 | 11,811,886 | 998.892 | 1,002.875 | 1,021.955 | 1,027.896 | 1,028.285 | 3.196 | 1,036.746 | 1,042.091 | 1,053.219 |
 | pres | dbar | 11,811,887 | 0.010 | 5.048 | 5.051 | 90.968 | 294.416 | 434.150 | 1,927.721 | 3,054.409 | 5,631.375 |
 
-![Distribution of levels per profile and maximum depth](figures/s1_levels_and_maxdepth.png)
+![Profile completeness and deepest non-missing temperature level; the exceedance curve describes depth reach, not continuous coverage](figures/s1_levels_and_maxdepth.png)
 
-*Reading:* about 72% of all T cells are NaN because most profiles are shallow; only 14.1% of profiles with T reach 1000 m and 2.7% reach 2000 m. Profiles reaching 5500 m: 5.
+*Figure: Profile completeness and deepest non-missing temperature level; the exceedance curve describes depth reach, not continuous coverage.*
+
+**Interpretation.** About 72% of all temperature entries on the standard-depth grid are missing. This reflects limited depth reach and missing levels, not an estimated rejection rate. Only 14.1% of profiles with T reach 1000 m and 2.7% reach 2000 m. Profiles reaching 5500 m: 5.
 
 ## 2. Temporal distribution
 
-![Temporal distribution of profiles](figures/s2_time_distribution.png)
+![Profile counts by year, latitude band and calendar month; year-by-month panels use logarithmic colour scales](figures/s2_time_distribution.png)
+
+*Figure: Profile counts by year, latitude band and calendar month; year-by-month panels use logarithmic colour scales.*
 
 **Profiles per decade**
 
@@ -132,15 +143,17 @@ The scatter files hold **414,221** profiles from 1983 to 2023, each on the 102 W
 
 The full year table is `tables/s2_profiles_per_year.csv` and the year x month matrix is `tables/s2_profiles_year_x_month.csv`.
 
-*Reading.* The record peaks in 2019 (30,992 profiles) and has its minimum in 1983 (1,027). Mean annual sampling is 3,530 profiles/yr for 1983-2004 and 17,714 profiles/yr for 2005-2023 (x5.0); 81.3% of all profiles are from 2005 onward. The seasonal bias is strong: 29.4% of profiles fall in Jul-Sep against 21.6% in Jan-Mar; north of 80N the ratio is 28.2% vs 17.5% (the most-sampled month is Sep, the least-sampled Jun, ratio 1.7). The summer maximum is consistent with ship access to ice-covered water (see section 6 for the inferred platform types).
+**Interpretation.** The record peaks in 2019 (30,992 profiles) and has its minimum in 1983 (1,027). Mean annual sampling is 3,530 profiles/yr for 1983-2004 and 17,714 profiles/yr for 2005-2023 (x5.0); 81.3% of all profiles are from 2005 onward. Sampling is seasonally uneven: 29.4% of profiles fall in Jul-Sep against 21.6% in Jan-Mar; north of 80N the corresponding shares are 28.2% and 17.5%. Across all profiles, the most-sampled month is Sep and the least-sampled is Jun (count ratio 1.7). These are sampling distributions, not evidence of a particular platform, sea-ice mechanism or environmental trend. The four reporting periods are not equal in length: 2013-2023 contains eleven years, the others ten. Quarters pool calendar months across years; DJF is not grouped into winter-years.
 
 ## 3. Spatial distribution
 
-Profiles were binned on a 100 km x 100 km grid that is an exact 4x4 block aggregation of the NSIDC EASE-Grid 2.0 North 25 km grid (EPSG:6931, Lambert azimuthal equal area, so every box has the same area; 180x180 boxes cover the hemisphere, all profiles are north of 60N). Ocean area is taken from the EASE2 25 km land mask (`EASE2_N25km.LOCImask_land50_coast0km`, value 255 = water in the file, as verified against its PNG legend and profile positions; 625 km2 per cell, cells north of 60N): 17.30 million km2 in 2,148 boxes containing any ocean. This includes marginal seas such as Hudson Bay, the Baltic, Gulf of Alaska and the parts of the Sea of Okhotsk north of 60N, so the 'ocean without data' fraction counts every one of them. 49 occupied boxes contain no ocean cell of that mask (coastal/land boxes).
+Profiles were binned on a 100 km x 100 km grid that is an exact 4x4 block aggregation of the NSIDC EASE-Grid 2.0 North 25 km grid (EPSG:6931, Lambert azimuthal equal area, so every box has the same area; 180x180 boxes cover the grid domain, all profiles are north of 60N). Ocean area is approximated from the EASE2 25 km land mask (`EASE2_N25km.LOCImask_land50_coast0km`, code 255 = water; 625 km2 per cell whose centre is north of 60N): 17.30 million km2 in 2,148 boxes containing any ocean. This includes marginal seas such as Hudson Bay, the Baltic, Gulf of Alaska and the parts of the Sea of Okhotsk north of 60N, so the 'ocean without data' fraction counts every one of them. 49 occupied boxes contain no ocean cell of that mask. This coastal/mask mismatch is retained in profile counts but contributes no ocean area. A box is counted as covered when its profile count meets the threshold; this does not establish coverage throughout its ocean area, at every depth or in every year.
 
 ### 3a. Counts per 100 km box
 
-![Profile counts per 100 km box](figures/s3a_box_counts_all.png)
+![Profiles per equal-area 100 km box over the full record; logarithmic colour scale](figures/s3a_box_counts_all.png)
+
+*Figure: Profiles per equal-area 100 km box over the full record; logarithmic colour scale.*
 
 **Distribution of box counts, and by decade and season** (`tables/s3_box_count_distribution*.csv`)
 
@@ -160,19 +173,25 @@ Profiles were binned on a 100 km x 100 km grid that is an exact 4x4 block aggreg
 | season JJA | 1,523 | 1,165 | 993 | 539 | 266 | 8 | 23.0 | 66.3 | 3,809 | 23.1 | 51.9 |
 | season SON | 1,561 | 1,283 | 1,133 | 599 | 304 | 12 | 32.0 | 82.4 | 7,740 | 21.1 | 59.6 |
 
-*Reading.* 1,806 boxes hold at least one profile; the median occupied box has 69 profiles, the mean 229, the maximum 19,811 (heavy-tailed: a few boxes with ice-drift stations or repeated sections dominate). 11.0% of the 60-90N ocean area lies in boxes with no profile at all, and only 72.2% lies in boxes with >=10 profiles over the whole 41 years. The densest boxes (centre lat, lon, count): (78.6N, 11.3E, 19,811); (79.4N, 12.3E, 6,827); (69.5N, -50.4E, 5,509); (81.1N, -130.9E, 4,643); (81.7N, -126.3E, 3,424).
+**Interpretation.** 1,806 boxes hold at least one profile; the median occupied box has 69 profiles, the mean 229, the maximum 19,811. The difference between median and mean indicates strongly concentrated sampling; counts alone cannot identify its platform sources or number of independent observations. 11.0% of the 60-90N ocean area lies in boxes with no profile at all, and only 72.2% lies in boxes with >=10 profiles over the whole 41 years. The densest boxes (centre lat, lon, count): (78.6N, 11.3E, 19,811); (79.4N, 12.3E, 6,827); (69.5N, -50.4E, 5,509); (81.1N, -130.9E, 4,643); (81.7N, -126.3E, 3,424).
 
 ### 3b. By decade
 
 ![Profile counts per box by decade](figures/s3b_box_counts_by_decade.png)
 
+*Figure: Profile counts per box by decade.*
+
 ### 3c. By season (WOA-style quarters)
 
 ![Profile counts per box by season](figures/s3c_box_counts_by_season.png)
 
+*Figure: Profile counts per box by season.*
+
 ### 3d. Temporal diversity of each box
 
-![Distinct years and months per box](figures/s3d_years_months_per_box.png)
+![Distinct years and calendar months represented in occupied boxes; blank boxes have no profiles, and twelve months need not occur in the same year](figures/s3d_years_months_per_box.png)
+
+*Figure: Distinct years and calendar months represented in occupied boxes; blank boxes have no profiles, and twelve months need not occur in the same year.*
 
 Boxes sampled in >=10 distinct years: 770; in >=20 years: 501; in all 12 calendar months: 409; in >=6 calendar months: 862. Ocean-area fraction with data in >=10 distinct years: 40.1%; in >=6 calendar months: 44.9%.
 
@@ -180,25 +199,29 @@ Boxes sampled in >=10 distinct years: 770; in >=20 years: 501; in all 12 calenda
 
 ![Counts on 1 and 0.25 degree grids](figures/s3e_latlon_grid_counts.png)
 
-| grid | cells with data | cells >=5 | cells >=10 | cells >=50 | cells >=100 | cells >=1000 | median per occupied | mean per occupied | max | ocean cells in grid (WOA23 0.25 deg mask) | % ocean cells with data |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 deg lat/lon | 5,911 | 4,022 | 3,142 | 1,581 | 1,069 | 37 | 11.0 | 70.1 | 6,968 | 7,519 | 78.6 |
-| 0.25 deg lat/lon | 42,405 | 17,815 | 9,502 | 1,250 | 494 | 6 | 3.0 | 9.8 | 2,521 | 108,927 | 38.9 |
+*Figure: Counts on 1 and 0.25 degree grids.*
 
-On the 1 deg grid 78.6% of WOA23 ocean cells north of 60N contain a profile (41.8% contain >=10); on the 0.25 deg grid 38.9% (8.7% with >=10). Cell lists: `tables/s3_grid_1deg_counts.csv`, `tables/s3_grid_0.25deg_counts.csv`; 100 km box list: `tables/s3_box100km_counts.csv` (columns x, y [EPSG:6931 metres], lon, lat, count, n_years, n_months, n_year_months, ocean_area_km2).
+| grid | cells with data | cells >=5 | cells >=10 | cells >=50 | cells >=100 | cells >=1000 | median per occupied | mean per occupied | max | ocean cells in grid (WOA23 0.25 deg mask) | occupied cells outside ocean mask | % ocean cells with data |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 deg lat/lon | 5,911 | 4,022 | 3,142 | 1,581 | 1,069 | 37 | 11.0 | 70.1 | 6,968 | 7,519 | 131 | 76.9 |
+| 0.25 deg lat/lon | 42,405 | 17,815 | 9,502 | 1,250 | 494 | 6 | 3.0 | 9.8 | 2,521 | 108,927 | 1,786 | 37.3 |
+
+On the 1 deg grid 76.9% of WOA23 ocean cells north of 60N contain a profile (40.8% contain >=10); on the 0.25 deg grid 37.3% (8.1% with >=10). Numerators and denominators both use the WOA23 surface ocean mask (a 1 deg cell is ocean if any of its sixteen 0.25 deg cells is ocean). Occupied cells outside that mask are listed separately. These are fractions of cells, not ocean area; latitude/longitude cells shrink towards the pole and should not be compared directly with the EASE2 area fractions. Cell lists: `tables/s3_grid_1deg_counts.csv`, `tables/s3_grid_0.25deg_counts.csv`; 100 km box list: `tables/s3_box100km_counts.csv` (columns x, y [EPSG:6931 metres], lon, lat, count, n_years, n_months, n_year_months, ocean_area_km2).
 
 ## 4. Depth distribution
 
-Number of valid observations at each of the 102 standard levels (full table `tables/s4_observations_per_level.csv`, which also has the per-decade counts and the box coverage at every level).
+Counts of non-missing level-values at each of the 102 standard depths (full table `tables/s4_observations_per_level.csv`, including counts by reporting period and box coverage at every level). Reaching a depth and having a value at that depth are different criteria; Section 1 reports depth reach, whereas this section reports values at individual levels.
 
 ![Observations per level](figures/s4a_observations_per_level.png)
+
+*Figure: Observations per level.*
 
 **Observations by depth range**
 
 | range | levels | T obs | S obs | profiles with any T | % of all profiles |
 |---|---|---|---|---|---|
 | 0-1500 m (WOA monthly & seasonal, 57 levels) | 57 | 11,428,386 | 11,428,385 | 413,951 | 99.9 |
-| 1500-5500 m (levels deeper than 1500 m; WOA annual only) | 45 | 383,501 | 383,501 | 38,865 | 9.4 |
+| >1500-5500 m (45 levels; WOA annual only) | 45 | 383,501 | 383,501 | 38,865 | 9.4 |
 | 0-5500 m (WOA annual, 102 levels) | 102 | 11,811,887 | 11,811,886 | 414,221 | 100.0 |
 
 There are 11,428,386 T observations in 0-1500 m but only 383,501 below 1500 m (3.25% of all T observations) from 38,865 profiles.
@@ -207,15 +230,17 @@ There are 11,428,386 T observations in 0-1500 m but only 383,501 below 1500 m (3
 
 | depth (m) | T obs | % of profiles | boxes >=1 | boxes >=10 | ocean area % >=1 | ocean area % >=10 |
 |---|---|---|---|---|---|---|
-| 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
-| 100.0 | 293,894.0 | 71.0 | 1,473.0 | 1,177.0 | 75.4 | 62.3 |
-| 500.0 | 157,300.0 | 38.0 | 981.0 | 794.0 | 53.3 | 44.2 |
-| 1,000.0 | 58,010.0 | 14.0 | 708.0 | 418.0 | 39.3 | 23.3 |
-| 2,000.0 | 11,022.0 | 2.7 | 501.0 | 225.0 | 28.0 | 12.8 |
-| 3,000.0 | 2,699.0 | 0.7 | 291.0 | 60.0 | 16.5 | 3.5 |
-| 5,000.0 | 13.0 | 0.0 | 4.0 | 0.0 | 0.2 | 0.0 |
+| 0 | 0 | 0.0 | 0 | 0 | 0.0 | 0.0 |
+| 100 | 293,894 | 71.0 | 1,473 | 1,177 | 75.4 | 62.3 |
+| 500 | 157,300 | 38.0 | 981 | 794 | 53.3 | 44.2 |
+| 1,000 | 58,010 | 14.0 | 708 | 418 | 39.3 | 23.3 |
+| 2,000 | 11,022 | 2.7 | 501 | 225 | 28.0 | 12.8 |
+| 3,000 | 2,699 | 0.7 | 291 | 60 | 16.5 | 3.5 |
+| 5,000 | 13 | 0.0 | 4 | 0 | 0.2 | 0.0 |
 
 ![Box coverage vs depth](figures/s4b_box_coverage_vs_depth.png)
+
+*Figure: Box coverage vs depth.*
 
 **Profiles with valid T per level and decade** (selected levels; all levels in the CSV)
 
@@ -240,13 +265,15 @@ There are 11,428,386 T observations in 0-1500 m but only 383,501 below 1500 m (3
 
 ![Counts per box at selected depths](figures/s4c_box_counts_by_depth.png)
 
-### Surface-level artefact and T/S consistency (computed)
+*Figure: Counts per box at selected depths.*
 
-The 0 m level contains **0** valid T values and 0 valid S values (100.0% empty). The 5 m level is 67.0% filled and the 10 m level 90.3% (15 m: 90.3%). The lower fill at 5 m is consistent with the upstream interpolation blanking the level nearest the first observation; near-surface (0-10 m) statistics must therefore be read as 5/10 m values. T and S are valid together in 11,811,886 level-values; cells where exactly one of them is valid: 1. Missing values are NaN after `scatter_io.load_scatter` / `data/scatter_all.npz` normalisation (raw yearly files use 0.0 for missing S/pres and arbitrary numbers for dens, so they are never read directly here).
+### Surface-level availability and T/S consistency
+
+The 0 m level contains **0** valid T values and 0 valid S values (100.0% empty). The 5 m level is 67.0% filled and the 10 m level 90.3% (15 m: 90.3%). These are observed availability patterns in the released arrays. They do not by themselves identify the upstream interpolation behaviour that produced them. Values at 5 or 10 m must not be presented as observations at 0 m or as full mixed-layer coverage. T and S are present together in 11,811,886 level-values; entries where exactly one of them is valid: 1. Missing values are NaN after `scatter_io.load_scatter` / `data/scatter_all.npz` normalisation. If the cache is absent, the yearly files are loaded through the same normalising loader.
 
 ## 5. Regional distribution
 
-Regions are simple lon/lat boxes/polygons (applied in priority order, first match wins) defined in this script; they are approximations meant for bookkeeping, not oceanographic boundaries.
+Regions are simple lon/lat boxes/polygons (applied in priority order, first match wins) defined in this script; they are approximate reporting regions, not validated oceanographic boundaries. Every profile is assigned once, and the central-Arctic region uses lat >=80N after excluding the Canadian Arctic Archipelago polygon; the historical '>80N' label in tables is shorthand for that rule. All regions are clipped by the available north-of-60N dataset and ocean mask. Regional area coverage uses the count in each whole 100 km box, including profiles in a neighbouring region if the box crosses a boundary.
 
 | region | definition (lon E, lat N) |
 |---|---|
@@ -268,6 +295,8 @@ Regions are simple lon/lat boxes/polygons (applied in priority order, first matc
 | Other | everything else (Baltic/Scandinavian coast, Okhotsk side, unassigned strips) |
 
 ![Region definitions](figures/s5a_regions_map.png)
+
+*Figure: Region definitions.*
 
 **Profiles per region and decade; median maximum depth; coverage of the region's ocean area by 100 km boxes**
 
@@ -313,41 +342,45 @@ Regions are simple lon/lat boxes/polygons (applied in priority order, first matc
 
 The Nordic-seas subset (Fram Strait/Greenland Sea + Iceland Sea + Norwegian Sea) used in section 7 has 153,656 profiles; the central Arctic (>80N) has 51,908.
 
-## 6. Sampling patterns and INFERRED provenance
+## 6. Heuristic sampling-pattern labels and proximity screening
 
-> **Everything in this section is INFERRED, not ground truth.** The published files carry no source identifier. The upstream processing (the upstream `duplicate.m`) numbered the sources 1 ITP, 2 Argo, 3 BOL (Bolin Centre), 4 NABOS, 5 CNarc (Xuelong/Xuelong-2), 6 WOD18, 7 CMEMS, but those IDs were dropped. The classes below are produced by a transparent heuristic.
+> **Labels are inferred sampling patterns, not identified platforms.** All profile membership and class counts below come from this script's unvalidated rules, not the source identifiers of the original observing systems.
+
+**Externally reported provenance.** The dataset and its compilation are described by [Li, Wu and Wang (2025)](https://doi.org/10.1038/s41597-025-05855-3). An earlier repository review of the released `duplicate.m` reports the source numbering 1 ITP, 2 Argo, 3 BOL (Bolin Centre), 4 NABOS, 5 CNarc (Xuelong/Xuelong-2), 6 WOD18 and 7 CMEMS. Those identifiers are not fields in the scatter arrays used here; this source inventory must not be confused with the heuristic membership below. This diagnostic run does not re-execute or independently validate the upstream compilation.
 
 ### 6.1 Method
 
-1. **Track linking.** Profiles are sorted by time; for every profile, candidate successors within 13 d are searched within 102 km (KD-tree in EPSG:6931 km). A link i->j requires dt in (1 min, 13 d] and distance <= 2 km + min(45 km/d x dt, 100 km) (i.e. drift <= ~0.5 m/s). Links are assigned greedily, one successor and one predecessor per profile, in two passes: pass A for steps <= 3 d (cost = dt + distance/45 km d-1), then pass B for 3-13 d (cost = distance / allowed distance). Linked chains are tracks: 313,617 links, 11,003 tracks with >= 5 profiles containing 67.9% of all profiles.
-2. **Track statistics** (number of profiles, duration, median time step, fraction of steps in 8-12.5 d and <= 3 d, drift speed, extent, median maximum depth, median latitude) are in `tables/s6_tracks_n_ge_5.csv`.
-3. **Track classes.** *ITP-like*: >= 10 profiles, score >= 0.80 where score = 0.35 x fraction of steps <= 3 d + 0.25 x latitude factor (0 at 66N, 1 at >= 72N) + 0.25 x [median max depth 100-1000 m] + 0.15 x [extent >= 20 km]. *Argo-like*: >= 5 profiles, >= 50% of steps 8-12.5 d, score >= 0.70 with score = 0.5 x fraction of regular steps + 0.3 x [median max depth 900-2300 m] + 0.2 x [median step 8-12.5 d]. *Fixed-point series*: >= 20 profiles, extent <= 10 km, duration >= 5 d (reported under 'other'). *Drifting shallow platform*: >= 10 profiles, >= 70% steps <= 3 d, lat >= 70N, median max depth < 100 m (under 'other').
-4. **Profile classes.** Profiles in a classified track inherit its class (confidence = track score, x0.7 if the profile's depth reach is outside the class range). Remaining profiles with salinity and either >= 2 neighbours within 50 km and 2 d, or a maximum depth >= 300 m, are *ship-CTD-like* (confidence = 0.25 x [in station cluster] + 0.25 x [>= 300 m] + 0.25 x [Jun-Oct] + 0.25 x [has S]); everything else (T-only profiles, isolated shallow profiles, fixed-point and shallow drifting series) is *other/unclassified* (confidence 0.2-0.6).
+1. **Track linking.** Profiles are sorted by time; for every profile, candidate successors within 13 d are searched within 102 km (KD-tree in EPSG:6931 km). A link i->j requires dt in (1 min, 13 d] and distance <= 2 km + min(45 km/d x dt, 100 km). These are projected distances, not geodesic distances; the additive allowance means this is not a strict speed bound. Links are assigned greedily, one successor and one predecessor per profile, in two passes: pass A for steps <= 3 d (cost = dt + distance/45 km d-1), then pass B for 3-13 d (cost = distance / allowed distance + 0.001 x dt in days). Each pass retains at most 6 lowest-cost outgoing and incoming candidates per profile. Linked chains are candidate tracks, not recovered platform trajectories: 313,617 links, 11,003 tracks with >= 5 profiles containing 67.9% of all profiles.
+2. **Track statistics** (number of profiles, duration, median time step, fraction of steps in 8-12.5 d and <= 3 d, drift speed, extent, median maximum depth, median latitude) are in `tables/s6_tracks_n_ge_5.csv`. Extent is the diagonal of the track's projected bounding box; step statistics exclude terminal profiles with no successor.
+3. **Track classes.** *ITP-like*: >= 10 profiles, score >= 0.80 where score = 0.35 x fraction of steps <= 3 d + 0.25 x latitude factor (linear from 0 at 66N to 1 at >=72N) + 0.25 x depth factor + 0.15 x [extent >=20 km]. The depth factor is 1 for median maximum depth 100-1000 m, 0.5 for 50-<100 m or >1000-1500 m, and 0 otherwise. The short-step fraction includes steps >0.02 d and <=3 d. *Argo-like*: >=5 profiles, >=50% of steps 8-12.5 d, score >=0.70 with score = 0.5 x fraction of regular steps + 0.3 x depth factor + 0.2 x [median step 8-12.5 d]. Its depth factor is 1 for 900-2300 m, 0.5 for 600-<900 m or >2300-4000 m, and 0 otherwise. *Fixed-point series*: >= 20 profiles, extent <= 10 km, duration >= 5 d (reported under 'other'). *Drifting shallow platform*: >=10 profiles, >=70% short steps, median lat >=70N, median max depth <100 m (under 'other'). Fixed-point rules take priority. If both ITP-like and Argo-like pass, the larger score wins, with ties assigned ITP-like; shallow-drift rules apply only to tracks not assigned those classes.
+4. **Profile labels and scores.** ITP-like and Argo-like track members inherit the label and score, multiplied by 0.7 if the individual depth reach lies outside 100-1000 m or 900-2300 m respectively. Fixed-point and shallow-drift members remain *other/unclassified*. Fixed-point score = 0.5 + 0.5 x min(1, track length/200); shallow-drift score = 0.6 x short-step fraction. Among remaining profiles, those with salinity and either >=2 neighbours in the search neighbourhood or depth reach >=300 m are *ship-CTD-like*: score = 0.25 x [>=2 neighbours] + 0.25 x [>=300 m] + 0.25 x [Jun-Oct] + 0.25 x [has S]. The neighbourhood is a radius-50 sphere in (projected x km, projected y km, time days x25): spatial distance squared + (25 x time separation) squared <=50 squared. Thus 50 km and 2 d are separate maxima, not a rectangular space-time search. Other residual profiles receive score 0.2. Square brackets denote indicator values 0 or 1; no year or sea-ice field is used.
 
-**Limitations (read before using the classes).** (1) The files contain no platform or source field; every class below is a *pattern-based guess* from time, position, depth reach and salinity availability. (2) Track linking is a greedy one-to-one matching with a speed limit; where several platforms operate close together, or a ship works near a float, links can be stolen or broken, so floats and ITPs are fragmented into many tracks and some of their profiles end up in the ship class. (3) Argo-like detection needs consecutive cycles of 8-12.5 d within 100 km; floats that surface less regularly (ice avoidance), profile every 5 d, or are sampled once, are missed. (4) 'ship-CTD-like' is the residual catch-all for S-bearing profiles that are in a station cluster or reach >= 300 m; it contains moorings, gliders, bottle/CTD data of other origin, and fragments of floats. (5) The year is NOT used by the classifier, so first-appearance years are a genuine (if weak) check; but no ground-truth labels were available, hence no precision/recall can be computed. Confidence is a heuristic score in [0,1], not a probability.
+**Limits of interpretation.** No profile-level platform or source identifiers are available, and no labelled validation sample was used. The rules can connect unrelated records or split a real platform's series, especially where several sampling systems operate nearby. Irregular cycles, gaps and isolated records can prevent an Argo-like assignment. *Ship-CTD-like* is a residual label for salinity-bearing clustered or sufficiently deep profiles: it may include other observations such as moorings, gliders, bottle data or fragments of profiler series. Neither this label nor ITP-like and Argo-like establishes instrument type. Scores in [0,1] quantify the stated rules only; they are not probabilities, confidence intervals or estimates of classification accuracy. No precision, recall or source-specific quality ranking can be established from these arrays.
 
 ### 6.2 Results: classes
 
-| class (INFERRED) | profiles | fraction (%) | mean confidence | profiles with confidence >= 0.6 | % with conf >= 0.6 | median max depth (m) | % with S | first year | median lat (N) |
+| class (INFERRED) | profiles | fraction (%) | mean heuristic score | profiles with score >= 0.6 | % with score >= 0.6 | median max depth (m) | % with S | first year | median lat (N) |
 |---|---|---|---|---|---|---|---|---|---|
-| ITP-like | 120,157 | 29.0 | 0.91 | 114,832 | 95.6 | 750 | 100.0 | 1,984 | 78.0 |
-| Argo-like | 23,262 | 5.6 | 0.89 | 22,357 | 96.1 | 1,900 | 100.0 | 1,997 | 67.5 |
-| ship-CTD-like | 214,400 | 51.8 | 0.68 | 131,299 | 61.2 | 225 | 100.0 | 1,983 | 68.2 |
-| other/unclassified | 56,402 | 13.6 | 0.40 | 12,208 | 21.6 | 50 | 100.0 | 1,983 | 75.8 |
+| ITP-like | 120,157 | 29.0 | 0.91 | 114,832 | 95.6 | 750 | 100.0 | 1984 | 78.0 |
+| Argo-like | 23,262 | 5.6 | 0.89 | 22,357 | 96.1 | 1,900 | 100.0 | 1997 | 67.5 |
+| ship-CTD-like | 214,400 | 51.8 | 0.68 | 131,299 | 61.2 | 225 | 100.0 | 1983 | 68.2 |
+| other/unclassified | 56,402 | 13.6 | 0.40 | 12,208 | 21.6 | 50 | 100.0 | 1983 | 75.8 |
 
-Subclasses:
+**Rule-based subclasses** (the cluster wording uses the ellipsoidal neighbourhood defined above):
 
-| class | subclass | profiles | mean_confidence | fraction (%) |
+| class | subclass | profiles | mean_score | fraction (%) |
 |---|---|---|---|---|
 | Argo-like | regular ~10 d cycle track | 23,262 | 0.89 | 5.6 |
-| ITP-like | drifting track, short steps, ice-covered basin | 120,157 | 0.91 | 29.0 |
+| ITP-like | high-latitude candidate track, short steps | 120,157 | 0.91 | 29.0 |
 | other/unclassified | drifting high-latitude track, shallow (<100 m median max depth) | 29,907 | 0.56 | 7.2 |
-| other/unclassified | fixed-point series (mooring / repeated station) | 1,356 | 0.65 | 0.3 |
 | other/unclassified | isolated shallow profile | 25,139 | 0.20 | 6.1 |
+| other/unclassified | low-extent candidate series | 1,356 | 0.65 | 0.3 |
 | ship-CTD-like | isolated deep cast | 38,760 | 0.63 | 9.4 |
 | ship-CTD-like | station cluster (>=3 profiles within 50 km and 2 d) | 175,640 | 0.70 | 42.4 |
 
-![Inferred class per year](figures/s6a_class_per_year.png)
+![Unvalidated sampling-pattern labels by year; neither counts nor shares identify platform contributions](figures/s6a_class_per_year.png)
+
+*Figure: Unvalidated sampling-pattern labels by year; neither counts nor shares identify platform contributions.*
 
 **Track statistics per inferred class** (tracks with >= 5 profiles)
 
@@ -359,7 +392,9 @@ Subclasses:
 | drifting shallow platform | 740 | 29,907 | 22.0 | 11.0 | 0.2 | 15.4 | 33.6 | 35.0 | 78.7 |
 | other tracks (n>=5, unclassified) | 6,658 | 106,695 | 7.0 | 10.6 | 0.8 | 20.0 | 78.7 | 175.0 | 68.4 |
 
-![Class maps](figures/s6b_class_maps.png)
+![Spatial distribution of heuristic labels, with a common logarithmic count scale](figures/s6b_class_maps.png)
+
+*Figure: Spatial distribution of heuristic labels, with a common logarithmic count scale.*
 
 **Maximum depth by inferred class**
 
@@ -370,7 +405,9 @@ Subclasses:
 | ship-CTD-like | 72.6 | 43.6 | 25.9 | 16.8 | 10.8 | 3.9 | 1.1 |
 | other/unclassified | 34.3 | 1.0 | 0.9 | 0.1 | 0.1 | 0.1 | 0.0 |
 
-![Max depth per class](figures/s6c_class_maxdepth.png)
+![Depth reach by heuristic label; depth itself is an input to these rules](figures/s6c_class_maxdepth.png)
+
+*Figure: Depth reach by heuristic label; depth itself is an input to these rules.*
 
 **Inferred class per region** (profiles; `tables/s6_class_per_region.csv`)
 
@@ -393,22 +430,26 @@ Subclasses:
 | Labrador Sea / subpolar N Atlantic | 0 | 7,779 | 44,771 | 3,223 |
 | Other | 622 | 0 | 6,161 | 4,304 |
 
-### 6.3 Validation against known structure (weak, no ground truth)
+### 6.3 Internal consistency and historical benchmarks
 
-![Heuristic validation](figures/s6d_validation.png)
+![Linked-profile timing and historical benchmark years; these are consistency checks, not independent platform validation](figures/s6d_validation.png)
 
-* The classifier does not use the year. ITP-like profiles first appear in **1984** (ITPs were first deployed in 2004), with 795 ITP-like profiles before 2004. Argo-like profiles first appear in **1997**, with 6 before 2000.
-* 93.3% of Argo-like tracks have a median step of 9-11 d (regularity is built into the rule, so this is not independent); the histogram of all link steps (left panel) shows the structure independent of the classification: a short-step population from profilers and a ~10 d peak. Argo-like profiles have median latitude 67.5N and 98.8% lie in the Nordic seas / Barents / subpolar North Atlantic regions; 83.1% of ITP-like profiles are north of 72N.
+*Figure: Linked-profile timing and historical benchmark years; these are consistency checks, not independent platform validation.*
 
-### 6.4 Near-duplicates and exact copies still in the data
+* The classifier does not use the year. ITP-like profiles first appear in **1984**, with 795 before the historical 2004 ITP deployment benchmark. Argo-like profiles first appear in **1997**, with 6 before the 2000 Argo benchmark. These early labels show why a sampling-pattern name cannot be interpreted as an identified platform.
+* 93.3% of Argo-like tracks have a median step of 9-11 d (regularity is built into the rule, so this is not independent); the all-link histogram also depends on the candidate search and greedy matching. Neither timing panel independently validates the labels. Argo-like profiles have median latitude 67.5N and 98.8% lie in the Nordic seas / Barents / subpolar North Atlantic reporting regions; 83.1% of ITP-like profiles are north of 72N. Latitude is itself an input to the ITP-like rule.
 
-The published deduplication (`duplicate.m`) removed a profile of sources 2-7 only if an earlier-accepted profile lay within |dlat|<0.1, |dlon|<0.1 (raw degrees, no cos(lat) and no dateline wrap) and < 6 h (the manuscript says 5 h). Source 1 (ITP) was never tested, profiles within one input file were not tested against each other (the comparison list is built per file), so near-duplicates are expected to remain among ITP profiles and within a source's file.
+### 6.4 Space-time proximity and identical temperature arrays
+
+**Reported upstream rule.** The earlier review of `duplicate.m` describes a comparison of sources 2-7 with previously accepted profiles using |dlat|<0.1 deg, |dlon|<0.1 deg and dt<6 h, without dateline wrapping; the publication describes a 5 h window. That review reports that source 1 (ITP) and pairs within one input file were not compared by this routine. These statements concern the released workflow, not the identity of individual records in this report.
+
+**Observed proximity counts.** The tests below operate on all published profiles, including repeated observations from the same sampling series. Angular windows are not constant physical distances, particularly at high latitudes. Each unordered pair is counted once; a profile can occur in many pairs. Passing a proximity test is a review flag, not proof of erroneous duplication or a reason to delete a record.
 
 | criterion | pairs | profiles involved | % of all profiles involved |
 |---|---|---|---|
 | pairs within 5 h (all, input to the tests) | 4,749,590 | 412,270 | 99.5 |
-| pairs |dlat|<0.1, |dlon|<0.1, dt<6 h  (criterion as coded in upstream duplicate.m) | 437,714 | 177,584 | 42.9 |
-| pairs |dlat|<0.1, |dlon|<0.1, dt<=5 h  (criterion as stated in the manuscript) | 393,453 | 169,467 | 40.9 |
+| pairs \|dlat\|<0.1, \|dlon\|<0.1, dt<6 h  (criterion as coded in upstream duplicate.m) | 437,714 | 177,584 | 42.9 |
+| pairs \|dlat\|<0.1, \|dlon\|<0.1, dt<=5 h  (5 h variant motivated by the manuscript) | 393,453 | 169,467 | 40.9 |
 |   same but with dateline-aware dlon | 437,718 | 177,588 | 42.9 |
 | pairs within 1 km (haversine) and 1 h | 62,271 | 65,840 | 15.9 |
 | pairs within 1 km and identical time stamp | 11,917 | 21,550 | 5.2 |
@@ -416,11 +457,11 @@ The published deduplication (`duplicate.m`) removed a profile of sources 2-7 onl
 | pairs (6 h/0.1 deg criterion) with identical T arrays | 3,742 | 5,525 | 1.3 |
 | pairs (1 km/1 h) with identical T arrays | 2,310 | 3,245 | 0.8 |
 
-437,714 pairs (177,584 profiles, 42.9%) still satisfy the 0.1 deg / 6 h test; 62,271 pairs (65,840 profiles) lie within 1 km and 1 h. Of the 6 h pairs, 3,742 have bitwise-identical T arrays.
+437,714 pairs involve 177,584 distinct profiles (42.9%) under the 0.1 deg / 6 h test; 62,271 pairs (65,840 profiles) lie within 1 km and 1 h. Of the 6 h pairs, 3,742 have matching temperature values and missing-level patterns. Salinity, pressure, density and original observation identifiers are not part of that equality test.
 
-**Near-duplicate pairs by inferred class of the two members**
+**Proximity pairs by inferred label of the two members** (A is the earlier member in stable time order; the matrix is not symmetrised)
 
-| row_0 | ITP-like | Argo-like | ship-CTD-like | other/unclassified |
+| class A / class B | ITP-like | Argo-like | ship-CTD-like | other/unclassified |
 |---|---|---|---|---|
 | ITP-like | 103,876 | 10 | 2,881 | 841 |
 | Argo-like | 4 | 102 | 82 | 2 |
@@ -438,9 +479,9 @@ The published deduplication (`duplicate.m`) removed a profile of sources 2-7 onl
 | 10-49 | 2,028 | 39,748 |
 | >=50 | 258 | 42,797 |
 
-There are 35,421 clusters of >= 2 profiles; the largest has 2,371 profiles. Largest clusters:
+There are 35,421 connected components of >=2 profiles; the largest has 2,371 profiles. Connections are transitive: two members of a component may be much farther apart than the pairwise thresholds. These components are not duplicate-event counts or validated platform tracks. Largest components:
 
-| cluster size | centre lat | centre lon | start | end | lat span (deg) | profiles with a duplicate-T twin | dominant inferred class | dominant region |
+| cluster size | centre lat | centre lon | start | end | lat span (deg) | profiles with an identical-T match | dominant inferred class | dominant region |
 |---|---|---|---|---|---|---|---|---|
 | 2,371 | 79.05 | -130.46 | 2023-01-04T18:33:00 | 2023-05-17T12:33:00 | 2.41 | 4 | ITP-like | Beaufort Sea / Canada Basin |
 | 1,634 | 79.70 | -134.42 | 2022-10-08T08:33:00 | 2023-01-15T20:33:00 | 1.15 | 0 | ITP-like | Beaufort Sea / Canada Basin |
@@ -458,24 +499,28 @@ There are 35,421 clusters of >= 2 profiles; the largest has 2,371 profiles. Larg
 | 558 | 78.46 | -130.97 | 2018-11-04T02:47:00 | 2018-12-05T00:02:00 | 0.57 | 299 | ship-CTD-like | Beaufort Sea / Canada Basin |
 | 443 | 78.76 | 9.02 | 2019-07-13T08:09:00 | 2019-07-19T09:42:00 | 0.27 | 0 | ITP-like | Fram Strait / Greenland Sea |
 
-![Near-duplicate statistics](figures/s6e_near_duplicates.png)
+![Space-time proximity counts and connected-component sizes; repeated sampling and duplicate records are not distinguished](figures/s6e_near_duplicates.png)
 
-**Exact copies** (identical T array including the NaN pattern; computed with a hash of each profile)
+*Figure: Space-time proximity counts and connected-component sizes; repeated sampling and duplicate records are not distinguished.*
 
-| min valid levels | profiles considered | identical-T groups (size>=2) | profiles in such groups | redundant copies (profiles - groups) | largest group | groups: same lat,lon,time | groups: same lat,lon, different time | groups: different position |
+**Identical temperature arrays** (stored values and missing-level pattern; hash matches are checked against the arrays)
+
+| min valid levels | profiles considered | identical-T groups (size>=2) | profiles in such groups | profiles beyond one per T group | largest group | groups: same lat,lon,time | groups: same lat,lon, different time | groups: different position |
 |---|---|---|---|---|---|---|---|---|
 | 1 | 414,221 | 5,712 | 22,097 | 16,385 | 71 | 891 | 100 | 4,721 |
 | 5 | 370,676 | 1,694 | 3,751 | 2,057 | 19 | 852 | 46 | 796 |
 
-16,385 profiles (all lengths) and 2,057 profiles with >= 5 valid levels are redundant exact copies (in 1,694 groups). Largest groups: `tables/s6_identical_T_top_groups.csv`.
+The number of profiles beyond one per temperature group is 16,385 for all lengths and 2,057 for profiles with >=5 valid levels (in 1,694 groups). These are not counts of confirmed duplicate observations. Identical short or rounded arrays can occur in distinct observations; equality of temperature alone does not establish equality of the complete record. Source identifiers and original records would be needed to resolve their meaning. Largest groups: `tables/s6_identical_T_top_groups.csv`.
 
-## 7. Data-quality descriptors of what remains
+## 7. Thermodynamic screening and descriptive statistics
 
-All statistics use the normalised arrays (NaN = missing). Temperature is treated as in-situ temperature and salinity as practical salinity (an assumption: the files do not state it). Pressure comes from the per-profile `pres` array. Seawater properties were computed with `gsw` for **all 414,220 profiles with S** (no sub-sampling), in chunks of 20,000 profiles.
+All statistics use the normalised arrays (NaN = missing). Temperature is treated as in-situ temperature and salinity as practical salinity (an assumption: the files do not state it). Pressure comes from the per-profile `pres` array. Seawater properties were computed with `gsw` across the full dataset (including **414,220 profiles with S**), in chunks of 20,000 profiles, without random subsampling. A level or pair is assessable only where the required T, S and pressure values produce finite seawater properties. These diagnostics flag unusual patterns under the stated assumptions; they do not validate the upstream QC, identify erroneous values or justify automatic rejection. No instrument uncertainty or independent truth dataset is supplied.
 
 ### 7.1 T and S per depth band
 
 ![T and S histograms per depth band](figures/s7a_hist_TS_per_band.png)
+
+*Figure: T and S histograms per depth band.*
 
 | depth band | T obs | T mean | T std | T min | T p1 | T p99 | T max | S obs | S mean | S std | S min | S p1 | S p99 | S max |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -486,16 +531,16 @@ All statistics use the normalised arrays (NaN = missing). Temperature is treated
 | 1500-3000 m | 408,612 | 0.39 | 1.84 | -1.31 | -0.99 | 3.85 | 7.44 | 408,612 | 34.91 | 0.04 | 33.35 | 34.87 | 34.99 | 35.42 |
 | 3000-5500 m | 14,383 | -0.70 | 0.39 | -1.10 | -1.06 | -0.25 | 6.97 | 14,383 | 34.92 | 0.05 | 33.45 | 34.89 | 34.97 | 35.43 |
 
-### 7.2 Static stability
+### 7.2 Common-pressure density inversions
 
-For each pair of adjacent valid levels the in-situ densities of both parcels were compared at the mid-pressure (`gsw.rho(SA, CT, p_mid)`); a pair is *unstable* if the upper parcel is denser than the lower by more than the stated threshold. Because the data are on a standard-depth grid, small inversions can reflect real mixed-layer noise or interpolation, so several thresholds are reported.
+For each pair of adjacent valid levels the in-situ densities of both parcels were compared at the mid-pressure (`gsw.rho(SA, CT, p_mid)`); a pair is flagged if the upper parcel is denser than the lower by more than the stated threshold. Absolute Salinity and Conservative Temperature are calculated using the recorded position and pressure. This is an adjacent-level screen, not a complete stability analysis or an error diagnosis. Physical variability, measurement uncertainty and interpolation can all affect the result. The existing four thresholds are retained; no uncertainty-calibrated threshold is inferred here.
 
-| threshold rho(k)-rho(k+1) (kg/m3) | adjacent-level pairs unstable | % of pairs | profiles with >=1 unstable pair | % of profiles with S |
-|---|---|---|---|---|
-| 0.001 | 341,441.000 | 2.996 | 113,130.000 | 27.312 |
-| 0.010 | 29,384.000 | 0.258 | 20,814.000 | 5.025 |
-| 0.030 | 6,503.000 | 0.057 | 5,338.000 | 1.289 |
-| 0.100 | 376.000 | 0.003 | 332.000 | 0.080 |
+| threshold rho(k)-rho(k+1) (kg/m3) | adjacent-level pairs flagged | % of pairs | profiles with >=1 flagged pair | % of profiles with S | profiles with assessable pairs | % of assessable profiles |
+|---|---|---|---|---|---|---|
+| 0.001 | 341,441 | 2.996 | 113,130 | 27.312 | 391,070 | 28.928 |
+| 0.010 | 29,384 | 0.258 | 20,814 | 5.025 | 391,070 | 5.322 |
+| 0.030 | 6,503 | 0.057 | 5,338 | 1.289 | 391,070 | 1.365 |
+| 0.100 | 376 | 0.003 | 332 | 0.080 | 391,070 | 0.085 |
 
 | upper level in band | pairs | % pairs > 0.001 | % pairs > 0.01 | % pairs > 0.03 | % pairs > 0.1 |
 |---|---|---|---|---|---|
@@ -507,39 +552,49 @@ For each pair of adjacent valid levels the in-situ densities of both parcels wer
 
 Out of 11,397,666 adjacent-level pairs, 0.258% exceed 0.01 kg/m3 and 0.057% exceed 0.03 kg/m3. 5.02% of profiles with S have at least one pair above 0.01 kg/m3 and 1.29% above 0.03 kg/m3.
 
-**By INFERRED class** (class is a heuristic label)
+**Denominators.** Overall profile percentages use all profiles with salinity, including those without an assessable adjacent-level pair. The additional assessable-profile column and the class table below use only profiles with at least one such pair; an unassessable profile is not a clean-QC result. Depth-band percentages use assessable pairs whose upper depth lies in that band.
 
-| class (INFERRED) | profiles with S | % unstable (>0.03 kg/m3) |
-|---|---|---|
-| ITP-like | 120,157 | 1.59 |
-| Argo-like | 23,262 | 0.51 |
-| ship-CTD-like | 214,400 | 1.06 |
-| other/unclassified | 56,401 | 2.39 |
+**By inferred sampling-pattern label** (not a source-specific quality comparison)
 
-### 7.3 Freezing point and spikes
+| class (INFERRED) | profiles with S | profiles with assessable pairs | profiles flagged (>0.03 kg/m3) | % of assessable profiles flagged |
+|---|---|---|---|---|
+| ITP-like | 120,157 | 117,767 | 1,877 | 1.59 |
+| Argo-like | 23,262 | 23,232 | 118 | 0.51 |
+| ship-CTD-like | 214,400 | 198,897 | 2,118 | 1.06 |
+| other/unclassified | 56,401 | 51,174 | 1,225 | 2.39 |
 
-![Static instability and freezing-point values by depth](figures/s7b_instability_freezing.png)
+### 7.3 Freezing-point and vertical-gradient screens
 
-* Values within +/-0.01 degC of the in-situ freezing temperature (`gsw.t_freezing(SA, p, 0)`): **122,194** (1.03% of 11,811,886 valid T values with S); values more than 0.01 degC below freezing: 35,813 (0.303%). Exactly T = -2.0 degC: 41 values (the data minimum is -2.00 degC).
+![Density-inversion and freezing-point screening at standard depths; flags are not validated error diagnoses](figures/s7b_instability_freezing.png)
+
+*Figure: Density-inversion and freezing-point screening at standard depths; flags are not validated error diagnoses.*
+
+* Values within +/-0.01 degC of the in-situ freezing temperature (`gsw.t_freezing(SA, p, 0)`): **122,194** (1.03% of 11,811,886 assessable T/S/pressure level-values); values more than 0.01 degC below freezing: 35,813 (0.303%). Exactly T = -2.0 degC: 41 values (the data minimum is -2.00 degC).
 
 | test | pairs flagged | % of pairs | profiles flagged | % of profiles (with T resp. S) |
 |---|---|---|---|---|
-| |dT/dz| > 0.3 degC/m between adjacent valid levels | 34,719 | 0.305 | 27,978 | 6.754 |
-| |dS/dz| > 0.2 per m between adjacent valid levels | 58,937 | 0.517 | 48,579 | 11.728 |
+| \|dT/dz\| > 0.3 degC/m between adjacent valid levels | 34,719 | 0.305 | 27,978 | 6.754 |
+| \|dS/dz\| > 0.2 per m between adjacent valid levels | 58,937 | 0.517 | 48,579 | 11.728 |
+
+The freezing calculation uses the air-free (`saturation_fraction=0`) convention. Near-freezing values can be physically plausible; below-freezing differences require context and the stated temperature/salinity assumptions. The gradient tests use absolute differences between adjacent non-missing standard levels divided by their depth separation. They detect steep gradients, not uniquely isolated spikes: real fronts, stratification, interpolation and measurement problems can all trigger them. Thresholds are fixed screening choices, not demonstrated limits on acceptable measurements.
 
 Per-level counts: `tables/s7_spikes_per_level.csv`, `tables/s7_freezing_point_per_level.csv`.
 
 ### 7.4 T-S diagram
 
-![T-S density diagram](figures/s7c_TS_diagram.png)
+![Absolute salinity–Conservative Temperature histogram (log counts) within SA 30–38 g/kg and CT -2.2–10 degC; contours show sigma0](figures/s7c_TS_diagram.png)
 
-The diagram holds 11,118,410 observations (all valid levels, in the plotted SA/CT window). Outliers are not removed.
+*Figure: Absolute salinity–Conservative Temperature histogram (log counts) within SA 30–38 g/kg and CT -2.2–10 degC; contours show sigma0.*
+
+The displayed histogram contains 11,118,410 level-values within its SA/CT window. Values outside that window are not shown, so it is not a histogram of every non-missing value. No additional quality filter is applied before binning. All depths are pooled and profiles with more levels contribute more entries; the diagram is not weighted to equalise profiles, area or time.
 
 ### 7.5 Mean and spread of T and S, 0-1500 m, in two basins
 
-![Mean and std profiles in central Arctic and Nordic seas](figures/s7d_mean_std_profiles.png)
+![Observation-weighted means and population standard deviations by depth; shading is mean ±1 standard deviation, not a confidence interval](figures/s7d_mean_std_profiles.png)
 
-Central Arctic = the 'Central Arctic (>80N ...)' region of Section 5; Nordic seas = the Fram Strait/Greenland Sea, Iceland Sea and Norwegian Sea regions. The spread mixes years, seasons and locations and is not a measurement error.
+*Figure: Observation-weighted means and population standard deviations by depth; shading is mean ±1 standard deviation, not a confidence interval.*
+
+Central Arctic = the 'Central Arctic (>80N ...)' region of Section 5; Nordic seas = the Fram Strait/Greenland Sea, Iceland Sea and Norwegian Sea regions. Means and standard deviations pool non-missing values at each depth without area, time or platform reweighting. The contributing sample changes with depth. Spread combines spatial, seasonal and interannual variability, sampling differences and any measurement or processing effects; it is neither a measurement-error estimate nor a confidence interval for a climatological mean.
 
 **Nominal water-mass layers by depth range** (fixed depth boundaries, not property-defined)
 
@@ -556,22 +611,26 @@ Central Arctic = the 'Central Arctic (>80N ...)' region of Section 5; Nordic sea
 | Nordic seas | Intermediate (900-2000 m) | 678,568 | -0.45 | 0.74 | 34.90 | 0.03 |
 | Nordic seas | Deep / bottom water (>=2000 m) | 47,839 | -0.83 | 0.21 | 34.91 | 0.03 |
 
-## 8. Fitness for purpose
+## 8. Application-specific coverage screens
 
-Ratings are computed by rule: each purpose has one coverage metric (percent of the 17.3 million km2 of 60-90N ocean in 100 km boxes meeting a stated sampling criterion). **Good** >= 60 %, **Marginal** 20-60 %, **Poor** < 20 %. The metric is an upper-bound indicator of coverage (it ignores seasonal, instrument and quality issues), so read each rating together with its comment. The denominator includes marginal seas (Hudson Bay, Baltic, Gulf of Alaska, ...) and shelves, which lowers all percentages; central-Arctic and Nordic-seas coverage is better than the area-wide numbers.
+The table retains the original heuristic categories: **Good** >=60%, **Marginal** >=20% and <60%, **Poor** <20%. They describe a single sampling-count proxy for each application, **not validated fitness for that purpose**. In particular, a 'Good' category is not an endorsement for assimilation, trend estimation, independent model validation or a resolved seasonal climatology.
 
-| purpose | metric (% ocean area) | rating | metric definition / evidence | comment |
+Most metrics weight the 17.3 million km2 of EASE2 mask ocean area north of 60N by the fraction in 100 km boxes meeting a count rule. The Atlantic-layer proxy instead uses the area in boxes whose centres are >=70N. The central-Arctic seasonal proxy is a fraction of twelve calendar months, and the model-validation proxy is a fraction of WOA-mask 1 deg ocean cells, not area. Each row states its denominator and selection. Shelves and marginal seas are retained in the broad area denominator; no bathymetric deep-ocean denominator is calculated. The categories are not directly comparable across these different metrics.
+
+No proxy measures independent sample size, instrument uncertainty, full depth coverage, temporal homogeneity or causal effects of observing systems. Counts pool years unless stated otherwise, and a depth-range application is generally represented by only one selected depth or a depth-reach criterion.
+
+| purpose | coverage metric (%) | coverage category | metric definition / evidence | comment |
 |---|---|---|---|---|
-| Gridded climatology 0-1500 m (monthly/seasonal) | 29.7 | Marginal | mean over the 4 WOA quarters of the % of 60-90N ocean area with >=10 T profiles at 500 m; by quarter: JFM 25%, AMJ 26%, JAS 36%, OND 33% | Needs large influence radii/smoothing; unconstrained in many boxes in at least one season. |
-| Regional climatology of the Atlantic layer (north of 70N) | 51.7 | Marginal | % of ocean area >70N with >=10 profiles at 300 m (all years); 35,610 central-Arctic profiles reach >=200 m | Best in Eurasian Basin and Nordic seas where drifting-platform and ship profiles are dense. |
-| Basin-scale deep (>2000 m) analysis | 12.8 | Poor | % of 60-90N ocean area with >=10 profiles at 2000 m (denominator includes shelves shallower than 2000 m, so a lower bound); 38,865 profiles (9.4%) have data below 1500 m | Deep data come mostly from ship CTD casts, mainly summer; Argo-like profiles stop at ~2000 m. |
-| Mixed layer / near-surface (0-50 m) | 44.5 | Marginal | mean over quarters of % ocean area with >=10 profiles at 10 m (0 m is empty, 5 m partly filled); by quarter: JFM 36%, AMJ 36%, JAS 58%, OND 47% | 0 m is empty and 5 m only ~67% filled; summer/ice-free sampling bias dominates. |
-| Halocline structure (50-200 m; needs S) | 62.3 | Good | % ocean area with >=10 S profiles at 100 m (all years) | Best-covered layer; fine vertical spacing, many INFERRED ITP-like profiles in the basins after 2004. |
-| Interannual variability / trends | 40.1 | Marginal | % ocean area sampled in >=10 distinct years (not accounting for profiles per year or season) | Coverage shifts from sparse ship sections to drifting platforms and Argo, changing place and season. |
-| Seasonal cycle in the central Arctic | 100.0 | Good | % of calendar months with >=100 central-Arctic profiles reaching >=200 m from >=10 distinct years; 12 of 12 months pass | Passes the count rule, but only 2.2% of central-Arctic profiles predate 2003; winter months rest on only ~15 years (mostly drifting platforms), so interannual and seasonal signals are confounded. |
-| Eulerian time series at a point | 32.7 | Marginal | % ocean area in 100 km boxes with >=100 profiles, >=10 years, >=6 calendar months; INFERRED fixed-point series: 32 | Only few locations; most data are drifting or one-off stations. |
-| Validation of models/reanalyses (point-wise, 1 deg) | 41.8 | Marginal | % of 1 deg ocean cells north of 60N with >=10 profiles (all years, all depths) | Subsample the model at the data locations/times instead of comparing with the mean state. |
-| Ocean heat content 0-700 m | 41.3 | Marginal | % ocean area with >=10 profiles reaching >=700 m (all years); by decade: 1983-1992 7%, 1993-2002 13%, 2003-2012 32%, 2013-2023 32% | Needs profiles that reach 700 m; shallow drifting-platform profiles reduce effective coverage. |
+| Gridded climatology 0-1500 m (monthly/seasonal) | 29.7 | Marginal | mean over the 4 WOA quarters of the % of 60-90N ocean area with >=10 T profiles at 500 m; by quarter: JFM 25%, AMJ 26%, JAS 36%, OND 33% | A 500 m quarterly proxy does not establish monthly support through 1500 m; interpolation choices require separate assessment. |
+| Regional climatology of the Atlantic layer (north of 70N) | 51.7 | Marginal | % of mask ocean area in boxes with centres >=70N and >=10 T profiles at 300 m (all years); 35,610 central-Arctic profiles reach >=200 m | Counts at 300 m are a coverage proxy, not property-based identification of Atlantic-layer water or regional representativeness. |
+| Basin-scale deep (>=2000 m) analysis | 12.8 | Poor | % of 60-90N mask ocean area with >=10 T profiles at 2000 m (shelves are included; not a bathymetry-limited deep-water fraction); 38,865 profiles (9.4%) have data below 1500 m | Few values reach these depths; the metric does not identify their source platforms or their seasonal representativeness. |
+| Mixed layer / near-surface (0-50 m) | 44.5 | Marginal | mean over quarters of % ocean area with >=10 profiles at 10 m (0 m is empty, 5 m partly filled); by quarter: JFM 36%, AMJ 36%, JAS 58%, OND 47% | No 0 m values; 5 m fill is 67.0%. Values at 10 m do not resolve mixed-layer structure or surface conditions. |
+| Halocline structure (50-200 m; needs S) | 62.3 | Good | % ocean area with >=10 S profiles at 100 m (all years) | A 100 m salinity count does not establish resolved halocline gradients, measurement quality or independent sampling. |
+| Interannual variability / trends | 40.1 | Marginal | % ocean area sampled in >=10 distinct years (not accounting for profiles per year or season) | Distinct-year counts do not ensure contiguous records, consistent locations/seasons or a valid trend uncertainty model. |
+| Seasonal cycle in the central Arctic | 100.0 | Good | % of calendar months with >=100 central-Arctic profiles reaching >=200 m from >=10 distinct years; 12 of 12 months pass | Only 2.2% of central-Arctic profiles predate 2003; Dec-Mar depth-reaching profiles cover 14-16 distinct years per month. Unequal year/location support can confound a seasonal comparison. |
+| Eulerian time series at a point | 32.7 | Marginal | % mask ocean area in 100 km boxes with >=100 profiles, >=10 years, >=6 calendar months; candidate low-extent series: 32 | A sampled 100 km box is not a fixed-point time series; candidate low-extent chains also require original-record verification. |
+| Validation of models/reanalyses (point-wise, 1 deg) | 40.8 | Marginal | % of WOA-mask 1 deg ocean cells north of 60N with >=10 profiles (all years, any depth; cell-count rather than area fraction) | Evaluate at observed locations, times and depths; account for representativeness and possible overlap with model assimilation data. |
+| Ocean heat content 0-700 m | 41.3 | Marginal | % ocean area with >=10 profiles reaching >=700 m (all years); by decade: 1983-1992 7%, 1993-2002 13%, 2003-2012 32%, 2013-2023 32% | Depth reach alone does not ensure complete 0-700 m profiles, valid heat integration or representative basin/time coverage. |
 
 **Central Arctic by calendar month** (profiles reaching >=200 m)
 
@@ -590,56 +649,85 @@ Ratings are computed by rule: each purpose has one coverage metric (percent of t
 | Nov | 3,928 | 19 | 19 |
 | Dec | 3,307 | 16 | 17 |
 
-### Prose summary
+### Implications for analysis
 
-* **Strengths.** 414,221 profiles with matched T and S; 29% of profiles are INFERRED ITP-like, giving dense sampling of the ice-covered basins after 2004 for the upper few hundred metres.
-* **Weaknesses.** 11.0% of the 60-90N ocean area has no profile; only 72.2% has >=10 profiles; sampling shifts strongly between sea-ice seasons and decades; deep data are sparse.
-* **Recommendation.** Use the data for regional/sectional studies of the upper 700 m and halocline since 2004, process studies and model comparison at profile locations. Use gridded climatologies, trend and deep-ocean studies only with an explicit sampling-bias assessment.
+* **Observed strengths.** 414,220 profiles contain both T and S; the upper ocean is much more densely sampled than deep levels. Regional, depth-specific and time-specific counts provide a starting point for selecting supported analyses.
+* **Observed constraints.** 11.0% of mask ocean area lies in boxes without any profile, and 72.2% lies in boxes with >=10 over the whole record. Those counts do not quantify the effective number of independent observations. Spatial and calendar support change through time; deep and surface-level data are limited.
+* **Use with explicit safeguards.** For regional or profile-location comparisons, verify the relevant year, season, depth and QC support rather than relying on total counts. Gridding and heat-content integration require a documented missing-data and weighting method. Trends require evaluation of changing sampling and serial dependence. Model validation requires checking whether these observations contributed to the evaluated analysis or assimilation. This report does not provide an observation-error model, establish validation independence or certify reliability for assimilation.
 
-## Appendix: tables written
+## Reproducibility and source attribution
 
-* `tables/s1_levels_per_profile_distribution.csv`
-* `tables/s1_max_depth_exceedance.csv`
-* `tables/s1_value_ranges.csv`
-* `tables/s2_profiles_per_decade.csv`
-* `tables/s2_profiles_per_month_of_year.csv`
-* `tables/s2_profiles_per_season.csv`
-* `tables/s2_profiles_per_year.csv`
-* `tables/s2_profiles_year_x_month.csv`
-* `tables/s3_box100km_counts.csv`
-* `tables/s3_box_count_distribution.csv`
-* `tables/s3_box_count_distribution_by_slice.csv`
-* `tables/s3_grid_0.25deg_counts.csv`
-* `tables/s3_grid_1deg_counts.csv`
-* `tables/s3_latlon_grid_distribution.csv`
-* `tables/s4_box_coverage_selected_depths.csv`
-* `tables/s4_observations_by_depth_range.csv`
-* `tables/s4_observations_per_level.csv`
-* `tables/s5_median_max_depth_region_decade.csv`
-* `tables/s5_region_definitions.csv`
-* `tables/s5_regions.csv`
-* `tables/s6_class_maxdepth_exceedance.csv`
-* `tables/s6_class_per_region.csv`
-* `tables/s6_class_per_year.csv`
-* `tables/s6_class_summary.csv`
-* `tables/s6_identical_T_summary.csv`
-* `tables/s6_identical_T_top_groups.csv`
-* `tables/s6_near_duplicate_cluster_sizes.csv`
-* `tables/s6_near_duplicate_pairs.csv`
-* `tables/s6_near_duplicate_pairs_by_class.csv`
-* `tables/s6_near_duplicate_pairs_per_year.csv`
-* `tables/s6_near_duplicate_top_clusters.csv`
-* `tables/s6_subclass_summary.csv`
-* `tables/s6_track_statistics_by_class.csv`
-* `tables/s6_tracks_n_ge_5.csv`
-* `tables/s7_TS_stats_per_depth_band.csv`
-* `tables/s7_freezing_point_per_level.csv`
-* `tables/s7_mean_std_57_levels_central_nordic.csv`
-* `tables/s7_spikes.csv`
-* `tables/s7_spikes_per_level.csv`
-* `tables/s7_static_instability.csv`
-* `tables/s7_static_instability_per_band.csv`
-* `tables/s7_static_instability_per_class.csv`
-* `tables/s7_water_mass_layers.csv`
-* `tables/s8_central_arctic_monthly.csv`
-* `tables/s8_fitness_for_purpose.csv`
+Run from the repository root using the environment described in [README](../../README.md):
+```bash
+.venv/bin/python scripts/07_report_scatter_data.py
+```
+The script writes this report, CSV tables and PNG figures only under `reports/scatter/`. It uses an existing normalised cache when present; otherwise it loads and normalises the local yearly scatter files. It does not download inputs, modify observations, remove flagged records or rerun the main pipeline. Required ancillary files are the NSIDC 25 km land mask and coordinate file in `data/ease2/`, plus `data/woa23_raw/woa23_decav91C0_t00_04.nc` for the latitude/longitude ocean mask. The WOA23 mask comes from non-missing annual surface temperature, not from a bathymetric depth mask. The EASE2 Sea Ice Regions file is not used by this script.
+
+**Runtime.** Python 3.14.7; numpy 2.5.4; scipy 1.18.1; pandas 3.0.6; xarray 2026.9.0; netCDF4 1.7.4; pyproj 3.8.0; matplotlib 3.11.2; cartopy 0.26.0; gsw 3.6.23. There is no random subsampling. The generation date is the local run date. Greedy track linking uses stable time sorting; tied-cost assignments can depend on input order and library behaviour, so retain the input manifest and runtime versions alongside any scientific use of these diagnostics.
+
+**Input identity for this run.** The SHA-256 manifest records local bytes, not independent verification of the original download or authors' upstream workflow. A pre-existing cache is not rebuilt by this report.
+
+| input | bytes | sha256 |
+|---|---|---|
+| data/scatter_all.npz | 692,580,750 | 3b38cd2350d4c186bbe946491d2dcdfc5206010ad8afb3f9462525a2edf259a7 |
+| data/ease2/EASE2_N25km.LOCImask_land50_coast0km.720x720.bin | 518,400 | 88ee988a4f16416e1045d05a6bfd62025482ee7917db265b19043cfb5e081acf |
+| data/ease2/NSIDC0772_LatLon_EASE2_N25km_v1.1.nc | 4,784,448 | 7f98ac14c39034f2bbd4146166cd1ab0f622cc9ecf3941224282eb539d16fb88 |
+| data/woa23_raw/woa23_decav91C0_t00_04.nc | 1,064,483,646 | f0bd4a654b402d93019e9ae32d31c3bf2748887e3286b6a3b6634a0ecb150117 |
+
+**Sources and credit.**
+* Li, J., Wu, X. & Wang, X. (2025). *An Arctic Ocean Thermohaline Dataset*. *Scientific Data* 12, 1607. [Article and compilation methods](https://doi.org/10.1038/s41597-025-05855-3).
+* Li, J. (2025). *AOTD_scatter*, figshare, version 1, CC BY 4.0. [Published scatter data](https://doi.org/10.6084/m9.figshare.28825490.v1). These observations are credited to the dataset authors and contributing observing programmes; the heuristic labels in this report are not metadata supplied by those programmes.
+* NOAA NCEI, [World Ocean Atlas 2023](https://www.ncei.noaa.gov/products/world-ocean-atlas), 1991-2020, 0.25 deg annual temperature file: used only to define the latitude/longitude ocean mask here.
+* NSIDC, [NSIDC-0772](https://nsidc.org/data/nsidc-0772) coordinate ancillary data and [NSIDC-0609](https://nsidc.org/data/nsidc-0609) EASE-Grid 2.0 land/ocean/coast/ice mask: used for the equal-area grid and ocean-area accounting.
+* WHOI, [Ice-Tethered Profiler programme](https://www.whoi.edu/itp/), and [Argo programme](https://argo.ucsd.edu/): historical context for the benchmark years, not profile-identity validation.
+
+For the distinct expected-spread products and their assumptions, see the [technical note](../../technical_note.md). None of the screening thresholds, heuristic labels or coverage categories here should be interpreted as calibrated observation errors for those products.
+
+## Appendix: complete CSV table index
+
+* [s0_input_manifest.csv](tables/s0_input_manifest.csv)
+* [s1_levels_per_profile_distribution.csv](tables/s1_levels_per_profile_distribution.csv)
+* [s1_max_depth_exceedance.csv](tables/s1_max_depth_exceedance.csv)
+* [s1_value_ranges.csv](tables/s1_value_ranges.csv)
+* [s2_profiles_per_decade.csv](tables/s2_profiles_per_decade.csv)
+* [s2_profiles_per_month_of_year.csv](tables/s2_profiles_per_month_of_year.csv)
+* [s2_profiles_per_season.csv](tables/s2_profiles_per_season.csv)
+* [s2_profiles_per_year.csv](tables/s2_profiles_per_year.csv)
+* [s2_profiles_year_x_month.csv](tables/s2_profiles_year_x_month.csv)
+* [s3_box100km_counts.csv](tables/s3_box100km_counts.csv)
+* [s3_box_count_distribution.csv](tables/s3_box_count_distribution.csv)
+* [s3_box_count_distribution_by_slice.csv](tables/s3_box_count_distribution_by_slice.csv)
+* [s3_grid_0.25deg_counts.csv](tables/s3_grid_0.25deg_counts.csv)
+* [s3_grid_1deg_counts.csv](tables/s3_grid_1deg_counts.csv)
+* [s3_latlon_grid_distribution.csv](tables/s3_latlon_grid_distribution.csv)
+* [s4_box_coverage_selected_depths.csv](tables/s4_box_coverage_selected_depths.csv)
+* [s4_observations_by_depth_range.csv](tables/s4_observations_by_depth_range.csv)
+* [s4_observations_per_level.csv](tables/s4_observations_per_level.csv)
+* [s5_median_max_depth_region_decade.csv](tables/s5_median_max_depth_region_decade.csv)
+* [s5_region_definitions.csv](tables/s5_region_definitions.csv)
+* [s5_regions.csv](tables/s5_regions.csv)
+* [s6_class_maxdepth_exceedance.csv](tables/s6_class_maxdepth_exceedance.csv)
+* [s6_class_per_region.csv](tables/s6_class_per_region.csv)
+* [s6_class_per_year.csv](tables/s6_class_per_year.csv)
+* [s6_class_summary.csv](tables/s6_class_summary.csv)
+* [s6_identical_T_summary.csv](tables/s6_identical_T_summary.csv)
+* [s6_identical_T_top_groups.csv](tables/s6_identical_T_top_groups.csv)
+* [s6_near_duplicate_cluster_sizes.csv](tables/s6_near_duplicate_cluster_sizes.csv)
+* [s6_near_duplicate_pairs.csv](tables/s6_near_duplicate_pairs.csv)
+* [s6_near_duplicate_pairs_by_class.csv](tables/s6_near_duplicate_pairs_by_class.csv)
+* [s6_near_duplicate_pairs_per_year.csv](tables/s6_near_duplicate_pairs_per_year.csv)
+* [s6_near_duplicate_top_clusters.csv](tables/s6_near_duplicate_top_clusters.csv)
+* [s6_subclass_summary.csv](tables/s6_subclass_summary.csv)
+* [s6_track_statistics_by_class.csv](tables/s6_track_statistics_by_class.csv)
+* [s6_tracks_n_ge_5.csv](tables/s6_tracks_n_ge_5.csv)
+* [s7_TS_stats_per_depth_band.csv](tables/s7_TS_stats_per_depth_band.csv)
+* [s7_freezing_point_per_level.csv](tables/s7_freezing_point_per_level.csv)
+* [s7_mean_std_57_levels_central_nordic.csv](tables/s7_mean_std_57_levels_central_nordic.csv)
+* [s7_spikes.csv](tables/s7_spikes.csv)
+* [s7_spikes_per_level.csv](tables/s7_spikes_per_level.csv)
+* [s7_static_instability.csv](tables/s7_static_instability.csv)
+* [s7_static_instability_per_band.csv](tables/s7_static_instability_per_band.csv)
+* [s7_static_instability_per_class.csv](tables/s7_static_instability_per_class.csv)
+* [s7_water_mass_layers.csv](tables/s7_water_mass_layers.csv)
+* [s8_central_arctic_monthly.csv](tables/s8_central_arctic_monthly.csv)
+* [s8_fitness_for_purpose.csv](tables/s8_fitness_for_purpose.csv)

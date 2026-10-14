@@ -4,7 +4,8 @@
   data/aotd_climatology/climatology_{01..12}.nc  AOTD gridded monthly climatology, figshare doi:10.6084/m9.figshare.27645738 (CC BY 4.0), ~2 GB
   data/woa23_raw/woa23_decav91C0_{t,s}{01..16}_04.nc  WOA23 1991-2020 0.25 deg T and S: 12 monthly + 4 seasonal files, ~18 GB, NOAA NCEI
 
-Existing files of the right size (and, for figshare, matching MD5) are skipped, so the script can be re-run to resume.
+Downloads are checked before replacing local files. Existing files of the right size
+(and, for figshare, matching MD5) are skipped; interrupted files are downloaded again.
 
 Usage (from the repo root):
     python scripts/01_download_data.py                # everything
@@ -17,27 +18,53 @@ import json
 import os
 import urllib.request
 
-FIGSHARE_API = "https://api.figshare.com/v2/articles/{}"
+FIGSHARE_API = "https://api.figshare.com/v2/articles/{}/versions/1"
 SCATTER_ID, CLIM_ID = 28825490, 27645738
 WOA_URL = "https://www.ncei.noaa.gov/data/oceans/woa/WOA23/DATA/{var}/netcdf/decav91C0/0.25/woa23_decav91C0_{v}{n:02d}_04.nc"
 
 
+def file_md5(path):
+    checksum = hashlib.md5()
+    with open(path, "rb") as f:
+        while chunk := f.read(1 << 22):
+            checksum.update(chunk)
+    return checksum.hexdigest()
+
+
 def fetch(url, dest, size=None, md5=None):
+    dest = os.fspath(dest)
     if os.path.exists(dest) and (size is None or os.path.getsize(dest) == size):
-        if md5 is None or hashlib.md5(open(dest, "rb").read()).hexdigest() == md5:
+        if (size is not None or md5 is not None) and (md5 is None or file_md5(dest) == md5):
             print("have", dest)
             return
-    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
     tmp = dest + ".part"
-    print("get ", url, "->", dest, flush=True)
-    with urllib.request.urlopen(url) as r, open(tmp, "wb") as f:
-        while chunk := r.read(1 << 22):
-            f.write(chunk)
+    with urllib.request.urlopen(url, timeout=120) as r:
+        content_length = r.headers.get("Content-Length")
+        response_size = int(content_length) if content_length is not None else None
+        if size is None:
+            if response_size is None:
+                raise ValueError(f"Cannot verify download size for {url}: no Content-Length or expected size")
+            size = response_size
+        elif response_size is not None and response_size != size:
+            raise ValueError(f"Download size metadata mismatch for {url}: expected {size}, server reports {response_size}")
+        if os.path.exists(dest) and os.path.getsize(dest) == size and (md5 is None or file_md5(dest) == md5):
+            print("have", dest)
+            return
+        print("get ", url, "->", dest, flush=True)
+        with open(tmp, "wb") as f:
+            while chunk := r.read(1 << 22):
+                f.write(chunk)
+    actual_size = os.path.getsize(tmp)
+    if actual_size != size:
+        raise ValueError(f"Incomplete download for {dest}: expected {size} bytes, received {actual_size}")
+    if md5 is not None and file_md5(tmp) != md5:
+        raise ValueError(f"MD5 checksum mismatch for {dest}")
     os.replace(tmp, dest)
 
 
 def figshare(article_id, outdir):
-    with urllib.request.urlopen(FIGSHARE_API.format(article_id)) as r:
+    with urllib.request.urlopen(FIGSHARE_API.format(article_id), timeout=120) as r:
         meta = json.load(r)
     for f in meta["files"]:
         fetch(f["download_url"], os.path.join(outdir, f["name"]), f["size"], f.get("computed_md5"))

@@ -1,8 +1,8 @@
-class,subclass,profiles,mean_confidence,fraction (%)
+class,subclass,profiles,mean_score,fraction (%)
 Argo-like,regular ~10 d cycle track,23262,0.8899635137554163,5.615842750608975
-ITP-like,"drifting track, short steps, ice-covered basin",120157,0.9076796237910246,29.00794503417258
+ITP-like,"high-latitude candidate track, short steps",120157,0.9076796237910246,29.00794503417258
 other/unclassified,"drifting high-latitude track, shallow (<100 m median max depth)",29907,0.5558287661142727,7.220058857469804
-other/unclassified,fixed-point series (mooring / repeated station),1356,0.6471091445427729,0.32736148094857576
 other/unclassified,isolated shallow profile,25139,0.2,6.068982499680122
+other/unclassified,low-extent candidate series,1356,0.6471091445427729,0.32736148094857576
 ship-CTD-like,isolated deep cast,38760,0.6258191434468524,9.357323747468138
 ship-CTD-like,station cluster (>=3 profiles within 50 km and 2 d),175640,0.6974251309496697,42.40248562965181

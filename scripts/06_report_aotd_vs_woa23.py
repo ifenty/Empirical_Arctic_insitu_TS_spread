@@ -1,13 +1,11 @@
-"""Compare the published AOTD monthly climatology with WOA23 (decav91C0, 0.25 deg, 57 levels, objectively analysed t_an/s_an).
+"""Compare AOTD and WOA23 monthly climatologies under an adopted grid alignment.
 
-The published grid is labelled 60.0..90.0 N / -180..179.75 E, but it is taken to BE the WOA23 grid (cell centres 59.875..89.875 N,
--179.875..179.875 E, WOA rows 599..719): the ocean mask agrees best at zero shift (level 0: 2.4% mismatch, worse at every other
-integer row/column shift). So the comparison is cell for cell, no regridding. WOA23 is 1991-2020, AOTD is 1983-2023.
-
-Outputs: outputs/woa/woa_on_aotd_grid.npy (untracked), reports/woa_compare/{tables/level_stats.csv, figures/*.png, figures/maps/*.png}
-Usage (from the repo root): python scripts/06_report_aotd_vs_woa23.py
+AOTD array indices are assigned to WOA23 centres (rows 599:720), without regridding.
+Mask agreement supports this assumption but does not prove the intended geolocation.
+Run from the repository root to regenerate the report, statistics and figures.
 """
-import os, sys
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -28,50 +26,221 @@ def published():
 
 
 RAW, OUT, REP = "data/woa23_raw", "outputs/woa", "reports/woa_compare"
-for d in (OUT, REP, f"{REP}/figures/maps", f"{REP}/tables"):
-    os.makedirs(d, exist_ok=True)
 NL = 57
 R0 = 599  # WOA23 lat row of 59.875 N; rows 599..719 cover 59.875..89.875
 
 
 def build():
     f = f"{OUT}/woa_on_aotd_grid.npy"
-    if os.path.exists(f):
+    if Path(f).exists():
         return np.load(f, mmap_mode="r")
     arr = np.lib.format.open_memmap(f, mode="w+", dtype="float32", shape=(12, 2, NL, 121, 1440))
     for v, (letter, var) in enumerate((("t", "t_an"), ("s", "s_an"))):
         for m in range(12):
-            ds = xr.open_dataset(f"{RAW}/woa23_decav91C0_{letter}{m + 1:02d}_04.nc", decode_times=False)
-            a = ds[var].isel(time=0, lat=slice(R0, 720)).values
-            arr[m, v] = a
-            ds.close()
+            with xr.open_dataset(f"{RAW}/woa23_decav91C0_{letter}{m + 1:02d}_04.nc", decode_times=False) as ds:
+                arr[m, v] = ds[var].isel(time=0, lat=slice(R0, 720)).values
     arr.flush()
     return np.load(f, mmap_mode="r")
 
 
-def stats(woa, pub):
+def stats(woa, pub, depth):
     rows = []
-    depth = xr.open_dataset(f"{RAW}/woa23_decav91C0_t01_04.nc", decode_times=False).depth.values
-    for k in range(NL):
+    for k in range(len(depth)):
         for v, name in enumerate(("T", "S")):
             for m in range(12):
                 a, b = np.asarray(pub[m, v, k]), np.asarray(woa[m, v, k])
                 both = np.isfinite(a) & np.isfinite(b)
                 row = dict(level=k, depth=float(depth[k]), var=name, month=m + 1, n_aotd=int(np.isfinite(a).sum()),
-                           n_woa=int(np.isfinite(b).sum()), n_both=int(both.sum()))
+                           n_woa=int(np.isfinite(b).sum()), n_both=int(both.sum()),
+                           bias=np.nan, rmse=np.nan, maxabs=np.nan, corr=np.nan)
                 if both.sum() > 10:
-                    d = a[both] - b[both]
+                    av, bv = a[both].astype("float64"), b[both].astype("float64")
+                    d = av - bv
                     row.update(bias=float(d.mean()), rmse=float(np.sqrt((d**2).mean())), maxabs=float(np.abs(d).max()),
-                               corr=float(np.corrcoef(a[both], b[both])[0, 1]))
+                               corr=float(np.corrcoef(av, bv)[0, 1]) if np.ptp(av) > 0 and np.ptp(bv) > 0 else np.nan)
                 rows.append(row)
-    return pd.DataFrame(rows), depth
+    return pd.DataFrame(rows)
+
+
+def mask_diagnostics(woa, pub, depth, levels=(0, 20), max_shift=3):
+    """Compare January masks, using interior rows and cyclic longitude for shift tests."""
+    rows = []
+    nrow = woa.shape[-2]
+    if nrow <= 2 * max_shift:
+        raise ValueError("Latitude grid is too small for the requested mask-shift test")
+    interior = slice(max_shift, nrow - max_shift)
+    for k in levels:
+        for v, name in enumerate(("T", "S")):
+            a, b = np.isfinite(pub[0, v, k]), np.isfinite(woa[0, v, k])
+            trials = []
+            for dr in range(-max_shift, max_shift + 1):
+                for dc in range(-max_shift, max_shift + 1):
+                    shifted = np.roll(b[max_shift + dr:nrow - max_shift + dr], dc, axis=1)
+                    trials.append((float(np.mean(a[interior] != shifted)), dr, dc))
+            best, dr, dc = min(trials)
+            rows.append(dict(depth=float(depth[k]), var=name,
+                             mismatch_pct=100 * float(np.mean(a != b)),
+                             interior_zero_pct=100 * float(np.mean(a[interior] != b[interior])),
+                             interior_best_pct=100 * best, row_offset=dr, column_roll=dc))
+    return pd.DataFrame(rows)
+
+
+def comparison_table(df):
+    rows = [
+        "| depth (m) | T RMSE Mar/Sep | T RMSE other 10 | T offset other 10 | S RMSE Mar/Sep | S RMSE other 10 |",
+        "|---|---|---|---|---|---|",
+    ]
+    for d in (0, 10, 50, 100, 300, 500, 750, 800, 1000, 1500):
+        q = df[df.depth == d]
+        if q.empty:
+            continue
+        med = q.groupby(["var", q.month.isin((3, 9))])[["rmse", "bias"]].median()
+        values = [med.loc[("T", True), "rmse"], med.loc[("T", False), "rmse"],
+                  med.loc[("T", False), "bias"], med.loc[("S", True), "rmse"],
+                  med.loc[("S", False), "rmse"]]
+        cells = ["–" if not np.isfinite(v) else f"{v:+.2f}" if i == 2 else f"{v:.2f}"
+                 for i, v in enumerate(values)]
+        rows.append(f"| {d} | " + " | ".join(cells) + " |")
+    return "\n".join(rows)
+
+
+def report(df, alignment):
+    mask_rows = [
+        "| variable / depth | mask mismatch, full grid (%) | interior mismatch, zero shift (%) | best tested interior mismatch (%) | best row offset / column roll |",
+        "|---|---|---|---|---|",
+    ]
+    for row in alignment.itertuples():
+        mask_rows.append(f"| {row.var} / {row.depth:g} m | {row.mismatch_pct:.2f} | "
+                         f"{row.interior_zero_pct:.2f} | {row.interior_best_pct:.2f} | "
+                         f"{row.row_offset:+d} / {row.column_roll:+d} |")
+    return f"""# Published AOTD and WOA23: monthly climatology comparison
+
+Generated by `scripts/06_report_aotd_vs_woa23.py` from the local published climatology
+files. See the [README](../../README.md) for reproduction, the
+[technical note](../../technical_note.md) for assumptions, and the
+[empirical-spread report](../expected_spread/expected_spread_report.md) for the
+observation-minus-reference products.
+
+## 1. Purpose and method
+
+This is a **comparison of two analyses**, not an independent accuracy assessment.
+Differences are AOTD minus WOA23. Temperature (T) here is treated as **in situ**
+temperature, unlike the potential-temperature differences in the spread products.
+Practical salinity (S) is conventionally labelled psu.
+
+* WOA23: `decav91C0`, objectively analysed `t_an` and `s_an`, monthly, 0.25°,
+  57 levels from 0 to 1500 m, reference period 1991–2020.
+* AOTD: published monthly fields for the dataset spanning 1983–2023.
+* Each monthly statistic uses cells finite in **both** fields at the selected depth.
+  Cells have equal weight; no area weighting is applied on this latitude–longitude
+  grid. Masks may differ between months, variables and depths.
+* RMSE = √mean((AOTD − WOA23)²); offset (`bias` in the CSV) = mean(AOTD − WOA23).
+  Correlation is spatial Pearson correlation on the same finite-cell intersection.
+  Statistics require more than ten shared cells. These summaries are not sampling
+  confidence intervals.
+
+### Adopted grid alignment
+
+The local AOTD files expose integer index coordinates rather than geographic cell
+centres. For this analysis their 121 × 1440 arrays are assigned to WOA23 rows 599–719:
+latitude centres 59.875–89.875°N and longitude centres −179.875–179.875°E.
+The fields are then compared cell for cell, without regridding. Maps use these same
+adopted coordinates.
+
+The following **January mask diagnostic** compares finite-value masks at the adopted
+alignment and tests integer row/column offsets from −3 to +3. Shift tests omit the
+outer three latitude rows on each side and wrap longitude cyclically, so their
+percentages are not directly comparable to the full-grid percentage.
+Offsets describe sampling a displaced WOA row and rolling its columns, not a
+geolocation correction.
+
+{chr(10).join(mask_rows)}
+
+Mask agreement supports the adopted correspondence, but cannot resolve a fractional
+cell shift or establish the intended AOTD geolocation. No independent confirmation
+of that alignment is provided here.
+
+## 2. Monthly statistics by depth
+
+Each entry below is the **median of monthly statistics** in its group, not an RMSE
+pooled across months. March and September are shown separately to describe the
+observed monthly contrast; this is a descriptive, post hoc grouping, not a test of
+its cause. Masks are determined separately for every monthly comparison.
+T quantities are in °C; S quantities are in psu.
+
+{comparison_table(df)}
+
+The unrounded values, per-field counts (`n_aotd`, `n_woa`) and intersection counts
+(`n_both`) are in [the level-statistics CSV](tables/level_stats.csv).
+
+## 3. Figures
+
+**Figure 1. Monthly comparison statistics at 0–1500 m.** Rows: T and S.
+Columns: difference RMSE, mean offset and valid-cell counts. Lines show January,
+March, June and September; the dashed count curve is WOA23 in January.
+Counts in the last column describe each field separately, whereas RMSE and offsets
+use their intersection.
+
+![Monthly climatology statistics versus depth](figures/aotd_vs_woa23_vs_depth.png)
+
+**Figure 2. AOTD, WOA23 and their difference at selected depths.** Each figure
+has rows for January, March, June and September. The first two columns share
+a colour range within each row (pooled 1st–99th percentiles); difference ranges
+are symmetric about zero (98th percentile of absolute differences). Scales can
+differ between rows. All fields are plotted at the adopted WOA23 centres.
+
+| depth | temperature | salinity |
+|---|---|---|
+| 10 m | ![T at 10 m](figures/maps/aotd_vs_woa23_T_L2_10m.png) | ![S at 10 m](figures/maps/aotd_vs_woa23_S_L2_10m.png) |
+| 100 m | ![T at 100 m](figures/maps/aotd_vs_woa23_T_L20_100m.png) | ![S at 100 m](figures/maps/aotd_vs_woa23_S_L20_100m.png) |
+| 1500 m | ![T at 1500 m](figures/maps/aotd_vs_woa23_T_L56_1500m.png) | ![S at 1500 m](figures/maps/aotd_vs_woa23_S_L56_1500m.png) |
+
+## 4. Findings and interpretation
+
+1. **Differences depend strongly on depth and month.** The table shows larger
+   near-surface RMSEs than at depth for temperature. Surface temperature offsets
+   also vary by monthly group. A pooled group median should not be interpreted
+   as an offset present in every month or location.
+2. **Deep salinity merits targeted investigation.** In the ten-month group,
+   salinity RMSE increases sharply between 750 and 800 m and remains much larger
+   at 1000 and 1500 m than in March/September. This is a documented disagreement
+   between products. Its cause and the relative accuracy of the two fields have
+   not been established by this comparison.
+3. **Consequences for the spread products are conditional.** Reference differences
+   can change the empirical observation-minus-reference metrics where profiles
+   sample the affected cells. A large climatology-to-climatology RMSE does not
+   directly determine the magnitude of the profile-based spread or its combined
+   maximum.
+
+Potential explanations include different input sampling, reference periods, analysis
+methods and grid interpretation. These are hypotheses, not attributions established
+here. WOA23 is an analysed reference rather than truth. AOTD scatter and climatology
+share source observations, and the extent of overlap with WOA23 is not quantified;
+neither comparison constitutes an independent holdout validation.
+
+## 5. Reproduction and attribution
+
+Run `python scripts/06_report_aotd_vs_woa23.py` from the repository root after
+downloading the reference files. It regenerates this report, the
+[level statistics](tables/level_stats.csv),
+[mask diagnostics](tables/mask_alignment.csv), and linked figures. The extracted
+WOA23 cache is `outputs/woa/woa_on_aotd_grid.npy`; remove it if changing the source
+files or extraction convention.
+
+AOTD: Li, J., Wu, X. & Wang, X. (2025), *An Arctic Ocean Thermohaline Dataset*,
+[doi:10.1038/s41597-025-05855-3](https://doi.org/10.1038/s41597-025-05855-3);
+published climatology,
+[doi:10.6084/m9.figshare.27645738.v1](https://doi.org/10.6084/m9.figshare.27645738.v1).
+WOA23: Locarnini et al. (2024), *Temperature*, NOAA Atlas NESDIS 89; Reagan et al.
+(2024), *Salinity*, NOAA Atlas NESDIS 90,
+[NOAA NCEI](https://www.ncei.noaa.gov/products/world-ocean-atlas).
+"""
 
 
 def plots(df):
     fig, ax = plt.subplots(2, 3, figsize=(15, 8))
     for v, name in enumerate(("T", "S")):
         s = df[df["var"] == name]
-        g = s.groupby("depth")
         for j, (col, lab) in enumerate((("rmse", "RMSE AOTD-WOA23"), ("bias", "bias AOTD-WOA23"), ("n_aotd", "valid cells"))):
             a = ax[v, j]
             for m in (1, 3, 6, 9):
@@ -84,8 +253,8 @@ def plots(df):
     fig.tight_layout(); fig.savefig(f"{REP}/figures/aotd_vs_woa23_vs_depth.png", dpi=100); plt.close(fig)
 
 
-def maps(woa, pub, depth, levels=(2, 20, 56), months=((0, "Jan"), (2, "Mar"), (5, "Jun"), (8, "Sep"))):
-    lat = np.linspace(60, 90, 121); lon = np.arange(-180, 180, .25); LON, LAT = np.meshgrid(lon, lat)
+def maps(woa, pub, depth, lat, lon, levels=(2, 20, 56), months=((0, "Jan"), (2, "Mar"), (5, "Jun"), (8, "Sep"))):
+    LON, LAT = np.meshgrid(lon, lat)
     tr = ccrs.PlateCarree()
     for k in levels:
         for v, name in enumerate(("T", "S")):
@@ -105,11 +274,25 @@ def maps(woa, pub, depth, levels=(2, 20, 56), months=((0, "Jan"), (2, "Mar"), (5
             fig.tight_layout(); fig.savefig(f"{REP}/figures/maps/aotd_vs_woa23_{name}_L{k}_{depth[k]:.0f}m.png", dpi=80); plt.close(fig)
 
 
-if __name__ == "__main__":
+def main():
+    for d in (OUT, REP, f"{REP}/figures/maps", f"{REP}/tables"):
+        Path(d).mkdir(parents=True, exist_ok=True)
     pub = published()
     woa = build()
-    df, depth = stats(woa, pub)
+    with xr.open_dataset(f"{RAW}/woa23_decav91C0_t01_04.nc", decode_times=False) as ds:
+        depth = ds.depth.values
+        lat, lon = ds.lat.values[R0:720], ds.lon.values
+    df = stats(woa, pub, depth)
+    alignment = mask_diagnostics(woa, pub, depth)
     df.to_csv(f"{REP}/tables/level_stats.csv", index=False)
+    alignment.to_csv(f"{REP}/tables/mask_alignment.csv", index=False)
     plots(df)
-    maps(woa, pub, depth)
+    maps(woa, pub, depth, lat, lon)
+    path = Path(REP) / "woa_compare_report.md"
+    path.write_text(report(df, alignment), encoding="utf-8")
+    print("wrote", path)
     print(df.groupby("var")[["rmse", "bias", "corr"]].median())
+
+
+if __name__ == "__main__":
+    main()

@@ -18,7 +18,6 @@ Outputs (untracked): outputs/expected_spread/expected_{std,rmse}_from_{woa23,aot
 """
 import os
 import numpy as np
-import sys
 import xarray as xr
 from pyproj import Transformer
 
@@ -26,7 +25,6 @@ from potential_temperature import calculate_potential_T
 
 RAW = "data/woa23_raw"
 OUT = "outputs/expected_spread"
-os.makedirs(OUT, exist_ok=True)
 NMONTHLY = 57  # levels with a monthly WOA23 field (0-1500 m); deeper levels use seasonal
 R0 = 599  # WOA23 lat row of the cell centred on 59.875 N
 NROW = 720 - R0
@@ -36,55 +34,103 @@ YEAR0 = 1992  # first year of in situ data used
 SEASON_FILE = np.array([13, 13, 13, 14, 14, 14, 15, 15, 15, 16, 16, 16])  # WOA23 winter, spring, summer, autumn
 
 
+def check_depth_levels(actual, expected, source):
+    if not np.array_equal(actual, expected):
+        raise ValueError(f"Depth levels in {source} do not match the standard depth grid")
+
+
+def profile_grid_indices(lat, lon):
+    lat, lon = np.asarray(lat), np.asarray(lon)
+    if not (np.isfinite(lat).all() and np.isfinite(lon).all()):
+        raise ValueError("Profile latitude and longitude must be finite")
+    if np.any((lat < -90) | (lat > 90) | (lon < -180) | (lon > 180)):
+        raise ValueError("Profile latitude or longitude is outside geographic bounds")
+    x, y = Transformer.from_crs(4326, 6931, always_xy=True).transform(lon, lat)
+    ix = np.floor((x + HALF) / CELL).astype(int)
+    iy = np.floor((HALF - y) / CELL).astype(int)
+    # The northern edge belongs to the last WOA23 latitude cell.
+    row = np.minimum(np.floor((lat + 90.0) / 0.25).astype(int), 719) - R0
+    col = np.floor((lon + 180.0) / 0.25).astype(int) % 1440
+    inside = (lat >= 60) & (ix >= 0) & (ix < NC) & (iy >= 0) & (iy < NC) & (row >= 0) & (row < NROW)
+    return iy * NC + ix, row, col, inside
+
+
 def load_ref(letter, var):
     """monthly (12, 57, NROW, 1440) and seasonal (4, 102-57, NROW, 1440) float32 reference fields, plus depth (102,)."""
     mon = np.empty((12, NMONTHLY, NROW, 1440), "float32")
+    monthly_depth = None
     for m in range(12):
-        ds = xr.open_dataset(f"{RAW}/woa23_decav91C0_{letter}{m + 1:02d}_04.nc", decode_times=False)
-        mon[m] = ds[var].isel(time=0, lat=slice(R0, 720)).values
-        ds.close()
+        path = f"{RAW}/woa23_decav91C0_{letter}{m + 1:02d}_04.nc"
+        with xr.open_dataset(path, decode_times=False) as ds:
+            if monthly_depth is None:
+                monthly_depth = ds.depth.values
+            check_depth_levels(ds.depth.values, monthly_depth, path)
+            mon[m] = ds[var].isel(time=0, lat=slice(R0, 720)).values
     ses = None
+    depth = None
     for i, f in enumerate((13, 14, 15, 16)):
-        ds = xr.open_dataset(f"{RAW}/woa23_decav91C0_{letter}{f:02d}_04.nc", decode_times=False)
-        a = ds[var].isel(time=0, lat=slice(R0, 720), depth=slice(NMONTHLY, None)).values
-        depth = ds.depth.values
-        ds.close()
+        path = f"{RAW}/woa23_decav91C0_{letter}{f:02d}_04.nc"
+        with xr.open_dataset(path, decode_times=False) as ds:
+            if depth is None:
+                depth = ds.depth.values
+            check_depth_levels(ds.depth.values, depth, path)
+            a = ds[var].isel(time=0, lat=slice(R0, 720), depth=slice(NMONTHLY, None)).values
         if ses is None:
             ses = np.empty((4,) + a.shape, "float32")
         ses[i] = a
+    check_depth_levels(monthly_depth, depth[:NMONTHLY], f"{letter} monthly WOA23 files")
     return mon, ses, depth
 
 
-def load_aotd(key):
+def load_aotd(key, depth):
     """published AOTD monthly field (12, 57, NROW, 1440) float32."""
     out = np.empty((12, NMONTHLY, NROW, 1440), "float32")
     for m in range(12):
-        ds = xr.open_dataset(f"data/aotd_climatology/climatology_{m + 1:02d}.nc")
-        out[m] = ds[key].values
-        ds.close()
+        path = f"data/aotd_climatology/climatology_{m + 1:02d}.nc"
+        with xr.open_dataset(path) as ds:
+            check_depth_levels(ds.depth.values, depth[:NMONTHLY], path)
+            out[m] = ds[key].values
+    return out
+
+
+def deviation_statistics(n, s1, s2):
+    with np.errstate(invalid="ignore", divide="ignore"):
+        mean = s1 / n
+        return dict(rmse=np.where(n > 0, np.sqrt(s2 / n), np.nan),
+                    std=np.where(n > 0, np.sqrt(np.maximum(s2 / n - mean ** 2, 0)), np.nan),
+                    bias=np.where(n > 0, mean, np.nan), n=n)
+
+
+def combine_statistics(w, a):
+    out = {}
+    for kind in ("std", "rmse"):
+        out[kind] = np.fmax(w[kind], a[kind])
+        # Resolve ties at the precision stored in NetCDF, so metadata is reproducible from the products.
+        w_stored, a_stored = w[kind].astype("float32"), a[kind].astype("float32")
+        pick_w = np.isnan(a_stored) | (w_stored >= a_stored)
+        out[f"bias_{kind}"] = np.where(pick_w, w["bias"], a["bias"])
+        out[f"n_{kind}"] = np.where(pick_w, w["n"], a["n"])
     return out
 
 
 def main():
+    os.makedirs(OUT, exist_ok=True)
     d = np.load("data/scatter_all.npz")
     lat, lon, month = d["lat"].astype("float64"), d["lon"].astype("float64"), d["month"].astype(int)
     depth_all = d["depth"].astype("float64")
     nlev = depth_all.shape[0]
-    x, y = Transformer.from_crs(4326, 6931, always_xy=True).transform(lon, lat)
-    ix = np.floor((x + HALF) / CELL).astype(int)
-    iy = np.floor((HALF - y) / CELL).astype(int)
+    cell, row, col, inside = profile_grid_indices(lat, lon)
     year = d["year"].astype(int)
-    inside = (year >= YEAR0) & (ix >= 0) & (ix < NC) & (iy >= 0) & (iy < NC)
-    cell = iy * NC + ix
-    row = np.floor((lat + 90.0) / 0.25).astype(int) - R0
-    col = np.floor((lon + 180.0) / 0.25).astype(int) % 1440
-    inside &= (row >= 0) & (row < NROW)
+    if np.any((month < 1) | (month > 12)):
+        raise ValueError("Profile month must be in 1..12")
+    inside &= year >= YEAR0
     print("profiles", len(lat), "inside grid/domain", int(inside.sum()), flush=True)
 
     monT, sesT, depth = load_ref("t", "t_an")
-    monS, sesS, _ = load_ref("s", "s_an")
-    assert nlev == len(depth)
-    aT, aS = load_aotd("temp"), load_aotd("salt")
+    monS, sesS, salinity_depth = load_ref("s", "s_an")
+    check_depth_levels(depth_all, depth, "scatter cache")
+    check_depth_levels(salinity_depth, depth, "WOA23 salinity files")
+    aT, aS = load_aotd("temp", depth), load_aotd("salt", depth)
     To, So = d["temp"], d["salt"]
     z = depth_all[:, None]
     acc = {(rn, v): [np.zeros((nlev, NC * NC)) for _ in range(3)] for rn in ("woa23", "aotd") for v in ("potential_temperature", "salinity")}
@@ -117,20 +163,10 @@ def main():
     shp = (nlev, NC, NC)
     metrics = {}  # (product, var) -> dict(std, rmse, bias, n)
     for (rn, v), (n, s1, s2) in acc.items():
-        with np.errstate(invalid="ignore", divide="ignore"):
-            mean = s1 / n
-            metrics[(rn, v)] = dict(rmse=np.where(n > 0, np.sqrt(s2 / n), np.nan),
-                                    std=np.where(n > 0, np.sqrt(np.maximum(s2 / n - mean ** 2, 0)), np.nan),
-                                    bias=np.where(n > 0, mean, np.nan), n=n)
+        metrics[(rn, v)] = deviation_statistics(n, s1, s2)
     for v in ("potential_temperature", "salinity"):
         w, a = metrics[("woa23", v)], metrics[("aotd", v)]
-        out = {}
-        for k in ("std", "rmse"):
-            out[k] = np.fmax(w[k], a[k])
-            pick_w = np.isnan(a[k]) | (w[k] >= a[k])  # bias and n come from the reference giving the larger value
-            out[f"bias_{k}"] = np.where(pick_w, w["bias"], a["bias"])
-            out[f"n_{k}"] = np.where(pick_w, w["n"], a["n"])
-        metrics[("woa23_and_aotd", v)] = out
+        metrics[("woa23_and_aotd", v)] = combine_statistics(w, a)
 
     xc = -HALF + CELL * (np.arange(NC) + 0.5)
     yc = HALF - CELL * (np.arange(NC) + 0.5)

@@ -1,3 +1,3 @@
-grid,cells with data,cells >=5,cells >=10,cells >=50,cells >=100,cells >=1000,median per occupied,mean per occupied,max,ocean cells in grid (WOA23 0.25 deg mask),% ocean cells with data
-1 deg lat/lon,5911,4022,3142,1581,1069,37,11.0,70.07629842666215,6968,7519,78.61417741720973
-0.25 deg lat/lon,42405,17815,9502,1250,494,6,3.0,9.768211295837755,2521,108927,38.92974193726074
+grid,cells with data,cells >=5,cells >=10,cells >=50,cells >=100,cells >=1000,median per occupied,mean per occupied,max,ocean cells in grid (WOA23 0.25 deg mask),occupied cells outside ocean mask,% ocean cells with data
+1 deg lat/lon,5911,4022,3142,1581,1069,37,11.0,70.07629842666215,6968,7519,131,76.87192445803963
+0.25 deg lat/lon,42405,17815,9502,1250,494,6,3.0,9.768211295837755,2521,108927,1786,37.29011172620195
